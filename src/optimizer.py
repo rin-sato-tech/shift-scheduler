@@ -41,7 +41,7 @@ def generate_schedule(
     requirements: list[StaffingRequirement],
     *,
     max_time_seconds: float = 30.0,
-    num_search_workers: int = 8,
+    num_search_workers: int = 1,
 ) -> ScheduleGenerationResult:
 
     active_employees = [

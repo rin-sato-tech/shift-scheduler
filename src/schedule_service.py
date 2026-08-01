@@ -81,7 +81,7 @@ def generate_month_schedule(
     target_month: str,
     *,
     max_time_seconds: float = 30.0,
-    num_search_workers: int = 8,
+    num_search_workers: int = 1,
 ) -> ScheduleGenerationServiceResult:
     employees = list_employees()
     day_off_requests = list_day_off_requests(
