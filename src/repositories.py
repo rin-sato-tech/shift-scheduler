@@ -759,3 +759,37 @@ def save_generated_schedule(
         )
 
     return generation_id
+
+
+def get_month_schedule_generation_id(
+    target_month: str,
+) -> int | None:
+    start_date, next_month = _month_bounds(
+        target_month
+    )
+
+    with get_connection() as connection:
+        rows = connection.execute(
+            """
+            SELECT DISTINCT generation_id
+            FROM schedules
+            WHERE target_date >= ?
+              AND target_date < ?
+              AND generation_id IS NOT NULL
+            """,
+            (
+                start_date.isoformat(),
+                next_month.isoformat(),
+            ),
+        ).fetchall()
+
+    if not rows:
+        return None
+
+    if len(rows) > 1:
+        raise RuntimeError(
+            "Multiple generation IDs were found "
+            "for the target month"
+        )
+
+    return rows[0]["generation_id"]

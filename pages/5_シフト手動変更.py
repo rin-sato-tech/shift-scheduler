@@ -1,0 +1,572 @@
+from __future__ import annotations
+
+import calendar
+from datetime import date
+
+import pandas as pd
+import streamlit as st
+
+from src.db import init_db
+from src.manual_schedule_service import (
+    apply_manual_change,
+    save_manual_schedule,
+    validate_manual_schedule,
+)
+from src.models import (
+    Employee,
+    ScheduleAssignment,
+    ValidationIssue,
+)
+from src.repositories import (
+    list_employees,
+    list_schedule_assignments,
+)
+from src.validation import has_errors
+
+init_db()
+
+st.set_page_config(
+    page_title="シフト手動変更",
+    page_icon="✏️",
+    layout="wide",
+)
+
+st.title("シフト手動変更")
+
+st.caption(
+    "生成済みシフトを変更し、"
+    "制約を再検証して保存します。"
+)
+
+today = date.today()
+
+year_options = list(
+    range(
+        today.year - 1,
+        today.year + 3,
+    )
+)
+
+year_column, month_column = st.columns(2)
+
+selected_year = year_column.selectbox(
+    "対象年",
+    options=year_options,
+    index=year_options.index(today.year),
+    key="manual_year",
+)
+
+selected_month = month_column.selectbox(
+    "対象月",
+    options=list(range(1, 13)),
+    index=today.month - 1,
+    format_func=lambda value: (
+        f"{value}月"
+    ),
+    key="manual_month",
+)
+
+target_month = (
+    f"{selected_year:04d}-"
+    f"{selected_month:02d}"
+)
+
+draft_key = (
+    f"manual_schedule_draft_"
+    f"{target_month}"
+)
+
+original_key = (
+    f"manual_schedule_original_"
+    f"{target_month}"
+)
+
+saved_assignments = (
+    list_schedule_assignments(
+        target_month
+    )
+)
+
+if not saved_assignments:
+    st.warning(
+        "対象月のシフトが"
+        "まだ生成されていません。"
+        "先にシフト生成画面で"
+        "自動生成してください。"
+    )
+    st.stop()
+
+if draft_key not in st.session_state:
+    st.session_state[draft_key] = (
+        saved_assignments.copy()
+    )
+
+if original_key not in st.session_state:
+    st.session_state[original_key] = (
+        saved_assignments.copy()
+    )
+
+draft_assignments: list[
+    ScheduleAssignment
+] = st.session_state[draft_key]
+
+employees = list_employees()
+
+active_employees = [
+    employee
+    for employee in employees
+    if employee.is_active
+]
+
+employee_map = {
+    employee.employee_id: employee
+    for employee in employees
+}
+
+WEEKDAY_LABELS = (
+    "月",
+    "火",
+    "水",
+    "木",
+    "金",
+    "土",
+    "日",
+)
+
+
+def build_schedule_dataframe(
+    *,
+    year: int,
+    month: int,
+    assignments: list[
+        ScheduleAssignment
+    ],
+    employee_map: dict[
+        str,
+        Employee,
+    ],
+) -> pd.DataFrame:
+    last_day = calendar.monthrange(
+        year,
+        month,
+    )[1]
+
+    grouped: dict[
+        tuple[date, str],
+        list[str],
+    ] = {}
+
+    for assignment in assignments:
+        employee = employee_map.get(
+            assignment.employee_id
+        )
+
+        name = (
+            employee.name
+            if employee is not None
+            else assignment.employee_id
+        )
+
+        if assignment.is_manual:
+            name = f"{name} ※"
+
+        grouped.setdefault(
+            (
+                assignment.target_date,
+                assignment.shift_type,
+            ),
+            [],
+        ).append(name)
+
+    rows = []
+
+    for day in range(
+        1,
+        last_day + 1,
+    ):
+        target_date = date(
+            year,
+            month,
+            day,
+        )
+
+        rows.append(
+            {
+                "日付": target_date,
+                "曜日": WEEKDAY_LABELS[
+                    target_date.weekday()
+                ],
+                "早番": "、".join(
+                    grouped.get(
+                        (
+                            target_date,
+                            "early",
+                        ),
+                        [],
+                    )
+                ),
+                "遅番": "、".join(
+                    grouped.get(
+                        (
+                            target_date,
+                            "late",
+                        ),
+                        [],
+                    )
+                ),
+            }
+        )
+
+    return pd.DataFrame(rows)
+
+
+st.subheader("編集中のシフト")
+
+st.caption(
+    "※は手動変更された配置です。"
+)
+
+draft_df = build_schedule_dataframe(
+    year=selected_year,
+    month=selected_month,
+    assignments=draft_assignments,
+    employee_map=employee_map,
+)
+
+st.dataframe(
+    draft_df,
+    width="stretch",
+    hide_index=True,
+)
+
+st.divider()
+st.subheader("配置を変更")
+
+last_day = calendar.monthrange(
+    selected_year,
+    selected_month,
+)[1]
+
+month_start = date(
+    selected_year,
+    selected_month,
+    1,
+)
+
+month_end = date(
+    selected_year,
+    selected_month,
+    last_day,
+)
+
+employee_options = {
+    (
+        f"{employee.employee_id}"
+        f"｜{employee.name}"
+    ): employee.employee_id
+    for employee in active_employees
+}
+
+with st.form(
+    key=f"manual_change_form_{target_month}"
+):
+    selected_date = st.date_input(
+        "変更日",
+        value=month_start,
+        min_value=month_start,
+        max_value=month_end,
+        format="YYYY/MM/DD",
+    )
+
+    selected_employee_label = (
+        st.selectbox(
+            "従業員",
+            options=list(
+                employee_options.keys()
+            ),
+        )
+    )
+
+    new_shift_label = st.selectbox(
+        "変更後",
+        options=[
+            "早番",
+            "遅番",
+            "休み",
+        ],
+    )
+
+    change_submitted = (
+        st.form_submit_button(
+            "編集案へ反映",
+            type="primary",
+        )
+    )
+
+shift_value_map = {
+    "早番": "early",
+    "遅番": "late",
+    "休み": "off",
+}
+
+if change_submitted:
+    employee_id = employee_options[
+        selected_employee_label
+    ]
+
+    result = apply_manual_change(
+        target_month=target_month,
+        assignments=draft_assignments,
+        employee_id=employee_id,
+        target_date=selected_date,
+        new_shift=shift_value_map[
+            new_shift_label
+        ],
+    )
+
+    if result.succeeded:
+        st.session_state[draft_key] = list(
+            result.assignments
+        )
+
+        st.success(result.message)
+        st.rerun()
+
+    else:
+        st.error(result.message)
+
+selected_employee_id = employee_options[
+    selected_employee_label
+]
+
+current_assignment = next(
+    (
+        assignment
+        for assignment in draft_assignments
+        if (
+            assignment.employee_id
+            == selected_employee_id
+            and assignment.target_date
+            == selected_date
+        )
+    ),
+    None,
+)
+
+current_shift = (
+    "休み"
+    if current_assignment is None
+    else (
+        "早番"
+        if (
+            current_assignment.shift_type
+            == "early"
+        )
+        else "遅番"
+    )
+)
+
+st.info(
+    f"現在の配置：{current_shift}"
+)
+
+st.divider()
+st.subheader("編集案の検証")
+
+draft_issues = validate_manual_schedule(
+    target_month=target_month,
+    assignments=draft_assignments,
+)
+
+
+def show_validation_issues(
+    issues: list[ValidationIssue],
+) -> None:
+    errors = [
+        issue
+        for issue in issues
+        if issue.severity == "error"
+    ]
+
+    warnings = [
+        issue
+        for issue in issues
+        if issue.severity == "warning"
+    ]
+
+    if not errors and not warnings:
+        st.success(
+            "制約違反や警告はありません。"
+        )
+        return
+
+    if errors:
+        st.error(
+            f"エラーが{len(errors)}件あります。"
+        )
+
+        for issue in errors:
+            st.markdown(
+                f"- **{issue.rule_id}**："
+                f"{issue.message}"
+            )
+
+    if warnings:
+        st.warning(
+            f"警告が{len(warnings)}件あります。"
+        )
+
+        for issue in warnings:
+            st.markdown(
+                f"- **{issue.rule_id}**："
+                f"{issue.message}"
+            )
+
+
+show_validation_issues(draft_issues)
+
+
+def assignment_key(
+    assignment: ScheduleAssignment,
+) -> tuple[date, str]:
+    return (
+        assignment.target_date,
+        assignment.employee_id,
+    )
+
+
+def build_change_dataframe(
+    original: list[ScheduleAssignment],
+    draft: list[ScheduleAssignment],
+    employee_map: dict[str, Employee],
+) -> pd.DataFrame:
+    original_map = {
+        assignment_key(assignment):
+        assignment
+        for assignment in original
+    }
+
+    draft_map = {
+        assignment_key(assignment):
+        assignment
+        for assignment in draft
+    }
+
+    all_keys = sorted(
+        set(original_map)
+        | set(draft_map)
+    )
+
+    rows = []
+
+    for key in all_keys:
+        before = original_map.get(key)
+        after = draft_map.get(key)
+
+        before_shift = (
+            before.shift_type
+            if before is not None
+            else "off"
+        )
+
+        after_shift = (
+            after.shift_type
+            if after is not None
+            else "off"
+        )
+
+        if before_shift == after_shift:
+            continue
+
+        target_date, employee_id = key
+
+        employee = employee_map.get(
+            employee_id
+        )
+
+        labels = {
+            "early": "早番",
+            "late": "遅番",
+            "off": "休み",
+        }
+
+        rows.append(
+            {
+                "日付": target_date,
+                "従業員ID": employee_id,
+                "氏名": (
+                    employee.name
+                    if employee is not None
+                    else "不明"
+                ),
+                "変更前": labels[
+                    before_shift
+                ],
+                "変更後": labels[
+                    after_shift
+                ],
+            }
+        )
+
+    return pd.DataFrame(rows)
+
+original_assignments = (
+    st.session_state[original_key]
+)
+
+change_df = build_change_dataframe(
+    original_assignments,
+    draft_assignments,
+    employee_map,
+)
+
+st.subheader("変更内容")
+
+if change_df.empty:
+    st.info(
+        "まだ変更されていません。"
+    )
+else:
+    st.dataframe(
+        change_df,
+        width="stretch",
+        hide_index=True,
+    )
+
+has_draft_errors = has_errors(
+    draft_issues
+)
+
+has_changes = not change_df.empty
+
+save_column, reset_column = st.columns(2)
+
+if save_column.button(
+    "手動変更を保存",
+    type="primary",
+    disabled=(
+        has_draft_errors
+        or not has_changes
+    ),
+):
+    result = save_manual_schedule(
+        target_month=target_month,
+        assignments=draft_assignments,
+    )
+
+    if result.succeeded:
+        st.session_state.pop(
+            draft_key,
+            None,
+        )
+        st.session_state.pop(
+            original_key,
+            None,
+        )
+
+        st.success(result.message)
+        st.rerun()
+
+    else:
+        st.error(result.message)
+
