@@ -65,3 +65,29 @@ class EmployeeScheduleSummary:
     late_count: int
     max_consecutive_days: int
     manager_assignment_count: int
+
+
+SolverStatus = Literal[
+    "OPTIMAL",
+    "FEASIBLE",
+    "INFEASIBLE",
+    "MODEL_INVALID",
+    "UNKNOWN",
+]
+
+
+@dataclass(frozen=True)
+class ScheduleGenerationResult:
+    status: SolverStatus
+    assignments: tuple[ScheduleAssignment, ...]
+    objective_value: int | None
+    max_deviation: int | None
+    total_deviation: int | None
+
+
+@dataclass(frozen=True)
+class ScheduleGenerationServiceResult:
+    generated: bool
+    solver_result: ScheduleGenerationResult | None
+    validation_issues: tuple[ValidationIssue, ...]
+    generation_id: int | None

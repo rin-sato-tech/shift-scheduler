@@ -74,6 +74,7 @@ def init_db() -> None:
                             'OPTIMAL',
                             'FEASIBLE',
                             'INFEASIBLE',
+                            'MODEL_INVALID',
                             'UNKNOWN'
                         )
                     ),

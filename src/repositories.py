@@ -658,3 +658,101 @@ def delete_month_schedule_assignments(
         )
 
     return cursor.rowcount
+
+
+def save_generated_schedule(
+    *,
+    target_month: str,
+    solver_status: str,
+    objective_value: int,
+    max_deviation: int,
+    total_deviation: int,
+    assignments: Iterable[ScheduleAssignment],
+) -> int:
+    start_date, next_month = _month_bounds(
+        target_month
+    )
+    now = _now_iso()
+    assignment_list = list(assignments)
+
+    for assignment in assignment_list:
+        if not (
+            start_date
+            <= assignment.target_date
+            < next_month
+        ):
+            raise ValueError(
+                "All assignments must belong "
+                "to the target month"
+            )
+
+    with get_connection() as connection:
+        cursor = connection.execute(
+            """
+            INSERT INTO schedule_generations (
+                target_month,
+                solver_status,
+                objective_value,
+                max_deviation,
+                total_deviation,
+                generated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                target_month,
+                solver_status,
+                objective_value,
+                max_deviation,
+                total_deviation,
+                now,
+            ),
+        )
+
+        generation_id = cursor.lastrowid
+
+        if generation_id is None:
+            raise RuntimeError(
+                "Failed to create generation history"
+            )
+
+        connection.execute(
+            """
+            DELETE FROM schedules
+            WHERE target_date >= ?
+              AND target_date < ?
+            """,
+            (
+                start_date.isoformat(),
+                next_month.isoformat(),
+            ),
+        )
+
+        connection.executemany(
+            """
+            INSERT INTO schedules (
+                generation_id,
+                target_date,
+                shift_type,
+                employee_id,
+                is_manual,
+                created_at,
+                updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    generation_id,
+                    assignment.target_date.isoformat(),
+                    assignment.shift_type,
+                    assignment.employee_id,
+                    int(assignment.is_manual),
+                    now,
+                    now,
+                )
+                for assignment in assignment_list
+            ],
+        )
+
+    return generation_id

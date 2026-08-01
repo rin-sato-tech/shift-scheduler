@@ -125,6 +125,7 @@
 - `OPTIMAL`
 - `FEASIBLE`
 - `INFEASIBLE`
+- `MODEL_INVALID`
 - `UNKNOWN`
 
 ### 補足
