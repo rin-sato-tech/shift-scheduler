@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from datetime import date
-
 import pandas as pd
 import streamlit as st
 
@@ -11,11 +9,12 @@ from src.staffing_service import (
     get_complete_month_requirements,
     save_month_staffing_requirements,
 )
-
-
-MESSAGE_KEY = (
-    "staffing_operation_message"
+from src.ui_helpers import (
+    select_target_month,
+    set_flash_message,
+    show_flash_message,
 )
+
 
 WEEKDAY_LABELS = (
     "月",
@@ -33,32 +32,10 @@ SHIFT_LABELS = {
 }
 
 
-def set_operation_message(
-    message: str,
-) -> None:
-    st.session_state[
-        MESSAGE_KEY
-    ] = message
-
-
-def show_operation_message() -> None:
-    message = st.session_state.pop(
-        MESSAGE_KEY,
-        None,
-    )
-
-    if message is not None:
-        st.success(message)
-
-
 def build_staffing_dataframe(
     target_month: str,
 ) -> pd.DataFrame:
-    requirements = (
-        get_complete_month_requirements(
-            target_month
-        )
-    )
+    requirements = get_complete_month_requirements(target_month)
 
     override = st.session_state.get(
         f"staffing_override_{target_month}"
@@ -67,29 +44,18 @@ def build_staffing_dataframe(
     rows = []
 
     for requirement in requirements:
-        required_count = (
-            requirement.required_count
-        )
-        manager_count = (
-            requirement
-            .required_manager_count
-        )
+        required_count = requirement.required_count
+        manager_count = requirement.required_manager_count
 
         if override is not None:
-            required_count = override[
-                "required_count"
-            ]
-            manager_count = override[
-                "required_manager_count"
-            ]
+            required_count = override["required_count"]
+            manager_count = override["required_manager_count"]
 
         rows.append(
             {
                 "日付": requirement.target_date,
                 "曜日": WEEKDAY_LABELS[
-                    requirement
-                    .target_date
-                    .weekday()
+                    requirement.target_date.weekday()
                 ],
                 "シフト": SHIFT_LABELS[
                     requirement.shift_type
@@ -98,9 +64,7 @@ def build_staffing_dataframe(
                     requirement.shift_type
                 ),
                 "必要人数": required_count,
-                "必要責任者数": (
-                    manager_count
-                ),
+                "必要責任者数": manager_count,
             }
         )
 
@@ -150,59 +114,19 @@ st.set_page_config(
 )
 
 st.title("必要人数設定")
+st.caption("日付・シフトごとの必要人数と必要責任者数を設定します。")
 
-st.caption(
-    "日付・シフトごとの必要人数と"
-    "必要責任者数を設定します。"
-)
+show_flash_message(key="staffing_flash")
 
-show_operation_message()
-
-today = date.today()
-
-year_options = list(
-    range(
-        today.year - 1,
-        today.year + 3,
-    )
-)
-
-year_column, month_column = (
-    st.columns(2)
-)
-
-selected_year = (
-    year_column.selectbox(
-        "対象年",
-        options=year_options,
-        index=year_options.index(
-            today.year
-        ),
-    )
-)
-
-selected_month = (
-    month_column.selectbox(
-        "対象月",
-        options=list(range(1, 13)),
-        index=today.month - 1,
-        format_func=lambda value: (
-            f"{value}月"
-        ),
-    )
-)
-
-target_month = (
-    f"{selected_year:04d}-"
-    f"{selected_month:02d}"
+_, _, target_month = (
+    select_target_month(key_prefix="staffing")
 )
 
 st.divider()
+
 st.subheader("一括設定")
 
-bulk_column1, bulk_column2 = (
-    st.columns(2)
-)
+bulk_column1, bulk_column2 = (st.columns(2))
 
 bulk_required_count = (
     bulk_column1.number_input(
@@ -231,14 +155,10 @@ if st.button(
         bulk_manager_count
         > bulk_required_count
     ):
-        st.error(
-            "必要責任者数は"
-            "必要人数以下にしてください。"
-        )
+        st.error("必要責任者数は必要人数以下にしてください。")
     else:
         st.session_state[
-            f"staffing_override_"
-            f"{target_month}"
+            f"staffing_override_{target_month}"
         ] = {
             "required_count": int(
                 bulk_required_count
@@ -249,18 +169,16 @@ if st.button(
         }
 
         st.session_state.pop(
-            f"staffing_editor_"
-            f"{target_month}",
+            f"staffing_editor_{target_month}",
             None,
         )
 
         st.rerun()
 
-staffing_df = build_staffing_dataframe(
-    target_month
-)
+staffing_df = build_staffing_dataframe(target_month)
 
 st.divider()
+
 st.subheader("日付・シフト別設定")
 
 edited_df = st.data_editor(
@@ -311,15 +229,13 @@ edited_df = st.data_editor(
 )
 
 invalid_rows = edited_df[
-    edited_df["必要責任者数"]
-    > edited_df["必要人数"]
+    edited_df["必要責任者数"] > edited_df["必要人数"]
 ]
 
 if not invalid_rows.empty:
     st.error(
         f"{len(invalid_rows)}件で"
-        "必要責任者数が必要人数を"
-        "超えています。"
+        "必要責任者数が必要人数を超えています。"
     )
 
 total_required = int(
@@ -327,9 +243,7 @@ total_required = int(
 )
 
 total_manager_required = int(
-    edited_df[
-        "必要責任者数"
-    ].sum()
+    edited_df["必要責任者数"].sum()
 )
 
 maximum_required = int(
@@ -344,12 +258,10 @@ metric1.metric(
     "月間必要勤務枠",
     total_required,
 )
-
 metric2.metric(
     "月間責任者枠",
     total_manager_required,
 )
-
 metric3.metric(
     "1シフト最大人数",
     maximum_required,
@@ -365,9 +277,7 @@ if button_column1.button(
     disabled=not invalid_rows.empty,
 ):
     requirements = (
-        dataframe_to_requirements(
-            edited_df
-        )
+        dataframe_to_requirements(edited_df)
     )
 
     result = (
@@ -379,19 +289,18 @@ if button_column1.button(
 
     if result.succeeded:
         st.session_state.pop(
-            f"staffing_override_"
-            f"{target_month}",
+            f"staffing_override_{target_month}",
             None,
         )
 
         st.session_state.pop(
-            f"staffing_editor_"
-            f"{target_month}",
+            f"staffing_editor_{target_month}",
             None,
         )
 
-        set_operation_message(
-            result.message
+        set_flash_message(
+            key="staffing_flash",
+            message=result.message,
         )
         st.rerun()
 
@@ -402,14 +311,12 @@ if button_column2.button(
     "保存済みの内容に戻す"
 ):
     st.session_state.pop(
-        f"staffing_override_"
-        f"{target_month}",
+        f"staffing_override_{target_month}",
         None,
     )
 
     st.session_state.pop(
-        f"staffing_editor_"
-        f"{target_month}",
+        f"staffing_editor_{target_month}",
         None,
     )
 
