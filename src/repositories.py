@@ -669,6 +669,8 @@ def save_generated_schedule(
     total_deviation: int,
     assignments: Iterable[ScheduleAssignment],
 ) -> int:
+    """生成履歴と対象月のシフトを同一トランザクションで保存する。"""
+
     start_date, next_month = _month_bounds(
         target_month
     )
@@ -713,7 +715,8 @@ def save_generated_schedule(
 
         if generation_id is None:
             raise RuntimeError(
-                "Failed to create generation history"
+                "Failed to create "
+                "schedule generation"
             )
 
         connection.execute(

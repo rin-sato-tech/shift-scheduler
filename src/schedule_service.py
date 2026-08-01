@@ -12,7 +12,7 @@ from src.repositories import (
     list_employees,
     list_schedule_assignments,
     list_staffing_requirements,
-    replace_month_schedule_assignments,
+    save_generated_schedule,
 )
 from src.validation import (
     validate_generation_inputs,
@@ -151,18 +151,22 @@ def generate_month_schedule(
             generation_id=None,
         )
 
-    generation_id = create_schedule_generation(
+    if (
+        solver_result.objective_value is None
+        or solver_result.max_deviation is None
+        or solver_result.total_deviation is None
+    ):
+        raise RuntimeError(
+            "Solver result metrics are missing"
+        )
+
+    generation_id = save_generated_schedule(
         target_month=target_month,
         solver_status=solver_result.status,
         objective_value=solver_result.objective_value,
         max_deviation=solver_result.max_deviation,
         total_deviation=solver_result.total_deviation,
-    )
-
-    replace_month_schedule_assignments(
-        target_month,
-        solver_result.assignments,
-        generation_id=generation_id,
+        assignments=solver_result.assignments,
     )
 
     return ScheduleGenerationServiceResult(
