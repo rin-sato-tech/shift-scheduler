@@ -39,3 +39,16 @@ class ScheduleAssignment:
     shift_type: ShiftType
     employee_id: str
     is_manual: bool = False
+
+
+ValidationSeverity = Literal["error", "warning"]
+
+
+@dataclass(frozen=True)
+class ValidationIssue:
+    severity: ValidationSeverity
+    rule_id: str
+    message: str
+    target_date: date | None = None
+    shift_type: ShiftType | None = None
+    employee_id: str | None = None
