@@ -57,13 +57,13 @@ def split_validation_issues(
     errors = [
         issue
         for issue in issues
-        if issue.severity == "ERROR"
+        if issue.severity == "error"
     ]
 
     warnings = [
         issue
         for issue in issues
-        if issue.severity == "WARNING"
+        if issue.severity == "warning"
     ]
 
     return errors, warnings
@@ -463,8 +463,6 @@ max_time_seconds = st.selectbox(
         f"{value}秒"
     ),
 )
-
-num_search_workers = 1
 
 existing_assignments = (
     list_schedule_assignments(
