@@ -825,8 +825,10 @@ def validate_required_manager_counts(
             1
             for assignment in shift_assignments
             if (
-                assignment.employee_id
-                in employee_map
+                assignment.employee_id in employee_map
+                and employee_map[
+                    assignment.employee_id
+                ].is_active
                 and employee_map[
                     assignment.employee_id
                 ].is_manager

@@ -12,6 +12,7 @@ from src.validation import (
     build_employee_schedule_summaries,
     calculate_max_consecutive_days,
     has_errors,
+    validate_assigned_employees_active,
     validate_consecutive_work_limit,
     validate_day_off_assignments,
     validate_one_shift_per_day,
@@ -272,6 +273,68 @@ def test_six_consecutive_days_is_error() -> None:
 
     assert len(issues) == 1
     assert issues[0].rule_id == "HC-07"
+
+
+def test_inactive_employee_is_error() -> None:
+    employees = [
+        make_employee(
+            "E001",
+            is_active=False,
+        )
+    ]
+    assignments = [
+        make_assignment(
+            date(2026, 8, 1),
+            "E001",
+        )
+    ]
+
+    issues = validate_assigned_employees_active(
+        assignments,
+        employees,
+    )
+
+    assert len(issues) == 1
+    assert issues[0].rule_id == "HC-08"
+
+
+def test_inactive_manager_does_not_satisfy_requirement() -> None:
+    employees = [
+        make_employee(
+            "E001",
+            is_manager=True,
+            is_active=False,
+        ),
+        make_employee("E002"),
+    ]
+
+    assignments = [
+        make_assignment(
+            date(2026, 8, 1),
+            "E001",
+        ),
+        make_assignment(
+            date(2026, 8, 1),
+            "E002",
+        ),
+    ]
+
+    requirements = [
+        make_requirement(
+            date(2026, 8, 1),
+            required_count=2,
+            required_manager_count=1,
+        )
+    ]
+
+    issues = validate_required_manager_counts(
+        assignments,
+        employees,
+        requirements,
+    )
+
+    assert len(issues) == 1
+    assert issues[0].rule_id == "HC-05"
 
 
 def test_employee_schedule_summary() -> None:

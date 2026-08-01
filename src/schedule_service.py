@@ -2,8 +2,7 @@ from __future__ import annotations
 
 from src.models import (
     ValidationIssue,
-    EmployeeScheduleSummary,
-    ValidationIssue,
+    EmployeeScheduleSummary
 )
 from src.repositories import (
     list_day_off_requests,
