@@ -7,8 +7,10 @@ from datetime import date, timedelta
 from src.models import (
     DayOffRequest,
     Employee,
+    ScheduleAssignment,
     StaffingRequirement,
     ValidationIssue,
+    EmployeeScheduleSummary,
 )
 
 
@@ -133,6 +135,12 @@ def validate_requirement_completeness(
             )
 
     return issues
+
+
+SHIFT_LABELS = {
+    "early": "早番",
+    "late": "遅番",
+}
 
 
 def validate_requirement_values(
@@ -556,4 +564,833 @@ def has_errors(
     return any(
         issue.severity == "error"
         for issue in issues
+    )
+
+
+def _build_employee_map(
+    employees: list[Employee],
+) -> dict[str, Employee]:
+    return {
+        employee.employee_id: employee
+        for employee in employees
+    }
+
+
+def _group_assignments_by_employee(
+    assignments: list[ScheduleAssignment],
+) -> dict[str, list[ScheduleAssignment]]:
+    grouped: dict[str, list[ScheduleAssignment]] = defaultdict(list)
+
+    for assignment in assignments:
+        grouped[assignment.employee_id].append(
+            assignment
+        )
+
+    for employee_assignments in grouped.values():
+        employee_assignments.sort(
+            key=lambda assignment: assignment.target_date
+        )
+
+    return grouped
+
+
+def _group_assignments_by_date_shift(
+    assignments: list[ScheduleAssignment],
+) -> dict[
+    tuple[date, str],
+    list[ScheduleAssignment],
+]:
+    grouped: dict[
+        tuple[date, str],
+        list[ScheduleAssignment],
+    ] = defaultdict(list)
+
+    for assignment in assignments:
+        grouped[
+            (
+                assignment.target_date,
+                assignment.shift_type,
+            )
+        ].append(assignment)
+
+    return grouped
+
+
+def validate_one_shift_per_day(
+    assignments: list[ScheduleAssignment],
+) -> list[ValidationIssue]:
+    issues: list[ValidationIssue] = []
+    counts: dict[tuple[str, date], int] = defaultdict(int)
+
+    for assignment in assignments:
+        counts[
+            (
+                assignment.employee_id,
+                assignment.target_date,
+            )
+        ] += 1
+
+    for (
+        employee_id,
+        target_date,
+    ), count in counts.items():
+        if count <= 1:
+            continue
+
+        issues.append(
+            ValidationIssue(
+                severity="error",
+                rule_id="HC-01",
+                target_date=target_date,
+                employee_id=employee_id,
+                message=(
+                    f"{employee_id}が同じ日に"
+                    f"{count}シフト配置されています。"
+                ),
+            )
+        )
+
+    return issues
+
+
+def validate_day_off_assignments(
+    assignments: list[ScheduleAssignment],
+    day_off_requests: list[DayOffRequest],
+) -> list[ValidationIssue]:
+    issues: list[ValidationIssue] = []
+    day_off_set = _build_day_off_set(day_off_requests)
+
+    for assignment in assignments:
+        key = (
+            assignment.employee_id,
+            assignment.target_date,
+        )
+
+        if key not in day_off_set:
+            continue
+
+        issues.append(
+            ValidationIssue(
+                severity="error",
+                rule_id="HC-02",
+                target_date=assignment.target_date,
+                shift_type=assignment.shift_type,
+                employee_id=assignment.employee_id,
+                message=(
+                    f"{assignment.employee_id}が"
+                    "希望休日に配置されています。"
+                ),
+            )
+        )
+
+    return issues
+
+
+def validate_shift_eligibility(
+    assignments: list[ScheduleAssignment],
+    employees: list[Employee],
+) -> list[ValidationIssue]:
+    issues: list[ValidationIssue] = []
+    employee_map = _build_employee_map(employees)
+
+    for assignment in assignments:
+        employee = employee_map.get(
+            assignment.employee_id
+        )
+
+        if employee is None:
+            continue
+
+        if _can_work_shift(
+            employee,
+            assignment.shift_type,
+        ):
+            continue
+
+        shift_label = SHIFT_LABELS[
+            assignment.shift_type
+        ]
+
+        issues.append(
+            ValidationIssue(
+                severity="error",
+                rule_id="HC-03",
+                target_date=assignment.target_date,
+                shift_type=assignment.shift_type,
+                employee_id=assignment.employee_id,
+                message=(
+                    f"{employee.name}は"
+                    f"{shift_label}勤務不可ですが、"
+                    "配置されています。"
+                ),
+            )
+        )
+
+    return issues
+
+
+def validate_required_staff_counts(
+    assignments: list[ScheduleAssignment],
+    requirements: list[StaffingRequirement],
+) -> list[ValidationIssue]:
+    issues: list[ValidationIssue] = []
+
+    assignment_map = (
+        _group_assignments_by_date_shift(
+            assignments
+        )
+    )
+
+    for requirement in requirements:
+        key = (
+            requirement.target_date,
+            requirement.shift_type,
+        )
+
+        assigned_count = len(
+            assignment_map.get(key, [])
+        )
+
+        if assigned_count == requirement.required_count:
+            continue
+
+        shift_label = SHIFT_LABELS[
+            requirement.shift_type
+        ]
+
+        if assigned_count < requirement.required_count:
+            shortage = (
+                requirement.required_count
+                - assigned_count
+            )
+
+            message = (
+                f"{shift_label}の必要人数は"
+                f"{requirement.required_count}人ですが、"
+                f"{assigned_count}人しか配置されていません。"
+                f"{shortage}人不足しています。"
+            )
+        else:
+            excess = (
+                assigned_count
+                - requirement.required_count
+            )
+
+            message = (
+                f"{shift_label}の必要人数は"
+                f"{requirement.required_count}人ですが、"
+                f"{assigned_count}人配置されています。"
+                f"{excess}人超過しています。"
+            )
+
+        issues.append(
+            ValidationIssue(
+                severity="error",
+                rule_id="HC-04",
+                target_date=requirement.target_date,
+                shift_type=requirement.shift_type,
+                message=message,
+            )
+        )
+
+    return issues
+
+
+def validate_required_manager_counts(
+    assignments: list[ScheduleAssignment],
+    employees: list[Employee],
+    requirements: list[StaffingRequirement],
+) -> list[ValidationIssue]:
+    issues: list[ValidationIssue] = []
+    employee_map = _build_employee_map(employees)
+
+    assignment_map = (
+        _group_assignments_by_date_shift(
+            assignments
+        )
+    )
+
+    for requirement in requirements:
+        key = (
+            requirement.target_date,
+            requirement.shift_type,
+        )
+
+        shift_assignments = assignment_map.get(
+            key,
+            [],
+        )
+
+        manager_count = sum(
+            1
+            for assignment in shift_assignments
+            if (
+                assignment.employee_id
+                in employee_map
+                and employee_map[
+                    assignment.employee_id
+                ].is_manager
+            )
+        )
+
+        if (
+            manager_count
+            >= requirement.required_manager_count
+        ):
+            continue
+
+        shortage = (
+            requirement.required_manager_count
+            - manager_count
+        )
+
+        issues.append(
+            ValidationIssue(
+                severity="error",
+                rule_id="HC-05",
+                target_date=requirement.target_date,
+                shift_type=requirement.shift_type,
+                message=(
+                    f"必要責任者数は"
+                    f"{requirement.required_manager_count}人ですが、"
+                    f"{manager_count}人しか配置されていません。"
+                    f"{shortage}人不足しています。"
+                ),
+            )
+        )
+
+    return issues
+
+
+def _get_week_start(target_date: date) -> date:
+    return target_date - timedelta(
+        days=target_date.weekday()
+    )
+
+
+def validate_weekly_work_limit(
+    assignments: list[ScheduleAssignment],
+) -> list[ValidationIssue]:
+    issues: list[ValidationIssue] = []
+
+    work_dates: dict[
+        tuple[str, date],
+        set[date],
+    ] = defaultdict(set)
+
+    for assignment in assignments:
+        week_start = _get_week_start(
+            assignment.target_date
+        )
+
+        work_dates[
+            (
+                assignment.employee_id,
+                week_start,
+            )
+        ].add(assignment.target_date)
+
+    for (
+        employee_id,
+        week_start,
+    ), dates in work_dates.items():
+        work_count = len(dates)
+
+        if work_count <= 5:
+            continue
+
+        week_end = week_start + timedelta(days=6)
+
+        issues.append(
+            ValidationIssue(
+                severity="error",
+                rule_id="HC-06",
+                target_date=week_start,
+                employee_id=employee_id,
+                message=(
+                    f"{employee_id}は"
+                    f"{week_start.isoformat()}から"
+                    f"{week_end.isoformat()}の週に"
+                    f"{work_count}日勤務しています。"
+                    "週5日上限を超えています。"
+                ),
+            )
+        )
+
+    return issues
+
+
+def calculate_max_consecutive_days(
+    work_dates: set[date],
+) -> int:
+    if not work_dates:
+        return 0
+
+    sorted_dates = sorted(work_dates)
+
+    max_count = 1
+    current_count = 1
+
+    for previous_date, current_date in zip(
+        sorted_dates,
+        sorted_dates[1:],
+    ):
+        if (
+            current_date - previous_date
+            == timedelta(days=1)
+        ):
+            current_count += 1
+            max_count = max(
+                max_count,
+                current_count,
+            )
+        else:
+            current_count = 1
+
+    return max_count
+
+
+def validate_consecutive_work_limit(
+    assignments: list[ScheduleAssignment],
+) -> list[ValidationIssue]:
+    issues: list[ValidationIssue] = []
+    employee_dates: dict[str, set[date]] = defaultdict(set)
+
+    for assignment in assignments:
+        employee_dates[
+            assignment.employee_id
+        ].add(assignment.target_date)
+
+    for employee_id, work_dates in employee_dates.items():
+        sorted_dates = sorted(work_dates)
+
+        if not sorted_dates:
+            continue
+
+        sequence_start = sorted_dates[0]
+        previous_date = sorted_dates[0]
+        sequence_count = 1
+
+        for current_date in sorted_dates[1:] + [None]:
+            is_consecutive = (
+                current_date is not None
+                and current_date - previous_date
+                == timedelta(days=1)
+            )
+
+            if is_consecutive:
+                sequence_count += 1
+                previous_date = current_date
+                continue
+
+            if sequence_count > 5:
+                issues.append(
+                    ValidationIssue(
+                        severity="error",
+                        rule_id="HC-07",
+                        target_date=sequence_start,
+                        employee_id=employee_id,
+                        message=(
+                            f"{employee_id}は"
+                            f"{sequence_start.isoformat()}から"
+                            f"{previous_date.isoformat()}まで"
+                            f"{sequence_count}日連続で"
+                            "勤務しています。"
+                        ),
+                    )
+                )
+
+            if current_date is not None:
+                sequence_start = current_date
+                previous_date = current_date
+                sequence_count = 1
+
+    return issues
+
+
+def validate_assigned_employees_active(
+    assignments: list[ScheduleAssignment],
+    employees: list[Employee],
+) -> list[ValidationIssue]:
+    issues: list[ValidationIssue] = []
+    employee_map = _build_employee_map(employees)
+
+    for assignment in assignments:
+        employee = employee_map.get(
+            assignment.employee_id
+        )
+
+        if employee is None:
+            issues.append(
+                ValidationIssue(
+                    severity="error",
+                    rule_id="HC-08",
+                    target_date=assignment.target_date,
+                    shift_type=assignment.shift_type,
+                    employee_id=assignment.employee_id,
+                    message=(
+                        f"存在しない従業員"
+                        f"{assignment.employee_id}が"
+                        "配置されています。"
+                    ),
+                )
+            )
+            continue
+
+        if employee.is_active:
+            continue
+
+        issues.append(
+            ValidationIssue(
+                severity="error",
+                rule_id="HC-08",
+                target_date=assignment.target_date,
+                shift_type=assignment.shift_type,
+                employee_id=assignment.employee_id,
+                message=(
+                    f"無効な従業員"
+                    f"{employee.name}が"
+                    "配置されています。"
+                ),
+            )
+        )
+
+    return issues
+
+
+CONTRACT_DAY_WARNING_THRESHOLD = 3
+
+
+def validate_contract_day_deviation(
+    assignments: list[ScheduleAssignment],
+    employees: list[Employee],
+    *,
+    warning_threshold: int = (
+        CONTRACT_DAY_WARNING_THRESHOLD
+    ),
+) -> list[ValidationIssue]:
+    issues: list[ValidationIssue] = []
+    assigned_dates: dict[str, set[date]] = defaultdict(set)
+
+    for assignment in assignments:
+        assigned_dates[
+            assignment.employee_id
+        ].add(assignment.target_date)
+
+    for employee in employees:
+        if not employee.is_active:
+            continue
+
+        assigned_count = len(
+            assigned_dates.get(
+                employee.employee_id,
+                set(),
+            )
+        )
+
+        difference = (
+            assigned_count
+            - employee.contract_days
+        )
+
+        if abs(difference) < warning_threshold:
+            continue
+
+        if difference < 0:
+            detail = (
+                f"契約勤務日数より"
+                f"{abs(difference)}日不足しています。"
+            )
+        else:
+            detail = (
+                f"契約勤務日数より"
+                f"{difference}日超過しています。"
+            )
+
+        issues.append(
+            ValidationIssue(
+                severity="warning",
+                rule_id="WR-01",
+                employee_id=employee.employee_id,
+                message=(
+                    f"{employee.name}の割当勤務日数は"
+                    f"{assigned_count}日です。"
+                    f"{detail}"
+                ),
+            )
+        )
+
+    return issues
+
+
+SHIFT_BALANCE_WARNING_THRESHOLD = 5
+
+
+def validate_shift_balance(
+    assignments: list[ScheduleAssignment],
+    employees: list[Employee],
+    *,
+    warning_threshold: int = (
+        SHIFT_BALANCE_WARNING_THRESHOLD
+    ),
+) -> list[ValidationIssue]:
+    issues: list[ValidationIssue] = []
+
+    counts: dict[
+        str,
+        dict[str, int],
+    ] = defaultdict(
+        lambda: {
+            "early": 0,
+            "late": 0,
+        }
+    )
+
+    for assignment in assignments:
+        counts[assignment.employee_id][
+            assignment.shift_type
+        ] += 1
+
+    for employee in employees:
+        if (
+            not employee.is_active
+            or not employee.can_work_early
+            or not employee.can_work_late
+        ):
+            continue
+
+        early_count = counts[
+            employee.employee_id
+        ]["early"]
+        late_count = counts[
+            employee.employee_id
+        ]["late"]
+
+        difference = abs(
+            early_count - late_count
+        )
+
+        if difference < warning_threshold:
+            continue
+
+        issues.append(
+            ValidationIssue(
+                severity="warning",
+                rule_id="WR-02",
+                employee_id=employee.employee_id,
+                message=(
+                    f"{employee.name}の勤務は、"
+                    f"早番{early_count}回、"
+                    f"遅番{late_count}回です。"
+                    "シフト区分に偏りがあります。"
+                ),
+            )
+        )
+
+    return issues
+
+
+MANAGER_BALANCE_WARNING_THRESHOLD = 5
+
+
+def validate_manager_assignment_balance(
+    assignments: list[ScheduleAssignment],
+    employees: list[Employee],
+    *,
+    warning_threshold: int = (
+        MANAGER_BALANCE_WARNING_THRESHOLD
+    ),
+) -> list[ValidationIssue]:
+    active_managers = [
+        employee
+        for employee in employees
+        if employee.is_active
+        and employee.is_manager
+    ]
+
+    if len(active_managers) <= 1:
+        return []
+
+    manager_ids = {
+        employee.employee_id
+        for employee in active_managers
+    }
+
+    counts = {
+        employee.employee_id: 0
+        for employee in active_managers
+    }
+
+    for assignment in assignments:
+        if assignment.employee_id in manager_ids:
+            counts[assignment.employee_id] += 1
+
+    maximum = max(counts.values())
+    minimum = min(counts.values())
+
+    if maximum - minimum < warning_threshold:
+        return []
+
+    return [
+        ValidationIssue(
+            severity="warning",
+            rule_id="WR-03",
+            message=(
+                "責任者の配置回数に偏りがあります。"
+                f"最多{maximum}回、最少{minimum}回です。"
+            ),
+        )
+    ]
+
+
+def build_employee_schedule_summaries(
+    assignments: list[ScheduleAssignment],
+    employees: list[Employee],
+) -> list[EmployeeScheduleSummary]:
+    employee_dates: dict[str, set[date]] = defaultdict(set)
+    shift_counts: dict[
+        str,
+        dict[str, int],
+    ] = defaultdict(
+        lambda: {
+            "early": 0,
+            "late": 0,
+        }
+    )
+
+    for assignment in assignments:
+        employee_dates[
+            assignment.employee_id
+        ].add(assignment.target_date)
+
+        shift_counts[
+            assignment.employee_id
+        ][assignment.shift_type] += 1
+
+    summaries: list[EmployeeScheduleSummary] = []
+
+    for employee in employees:
+        if not employee.is_active:
+            continue
+
+        work_dates = employee_dates.get(
+            employee.employee_id,
+            set(),
+        )
+
+        assigned_days = len(work_dates)
+
+        summaries.append(
+            EmployeeScheduleSummary(
+                employee_id=employee.employee_id,
+                employee_name=employee.name,
+                contract_days=employee.contract_days,
+                assigned_days=assigned_days,
+                difference=(
+                    assigned_days
+                    - employee.contract_days
+                ),
+                early_count=shift_counts[
+                    employee.employee_id
+                ]["early"],
+                late_count=shift_counts[
+                    employee.employee_id
+                ]["late"],
+                max_consecutive_days=(
+                    calculate_max_consecutive_days(
+                        work_dates
+                    )
+                ),
+                manager_assignment_count=(
+                    assigned_days
+                    if employee.is_manager
+                    else 0
+                ),
+            )
+        )
+
+    return sorted(
+        summaries,
+        key=lambda summary: summary.employee_id,
+    )
+
+
+def validate_schedule(
+    assignments: list[ScheduleAssignment],
+    employees: list[Employee],
+    day_off_requests: list[DayOffRequest],
+    requirements: list[StaffingRequirement],
+) -> list[ValidationIssue]:
+    issues: list[ValidationIssue] = []
+
+    issues.extend(
+        validate_one_shift_per_day(assignments)
+    )
+    issues.extend(
+        validate_day_off_assignments(
+            assignments,
+            day_off_requests,
+        )
+    )
+    issues.extend(
+        validate_shift_eligibility(
+            assignments,
+            employees,
+        )
+    )
+    issues.extend(
+        validate_required_staff_counts(
+            assignments,
+            requirements,
+        )
+    )
+    issues.extend(
+        validate_required_manager_counts(
+            assignments,
+            employees,
+            requirements,
+        )
+    )
+    issues.extend(
+        validate_weekly_work_limit(assignments)
+    )
+    issues.extend(
+        validate_consecutive_work_limit(
+            assignments
+        )
+    )
+    issues.extend(
+        validate_assigned_employees_active(
+            assignments,
+            employees,
+        )
+    )
+    issues.extend(
+        validate_contract_day_deviation(
+            assignments,
+            employees,
+        )
+    )
+    issues.extend(
+        validate_shift_balance(
+            assignments,
+            employees,
+        )
+    )
+    issues.extend(
+        validate_manager_assignment_balance(
+            assignments,
+            employees,
+        )
+    )
+
+    return sorted(
+        issues,
+        key=lambda issue: (
+            0 if issue.severity == "error" else 1,
+            issue.target_date or date.max,
+            issue.shift_type or "",
+            issue.employee_id or "",
+            issue.rule_id,
+        ),
     )

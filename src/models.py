@@ -52,3 +52,16 @@ class ValidationIssue:
     target_date: date | None = None
     shift_type: ShiftType | None = None
     employee_id: str | None = None
+
+
+@dataclass(frozen=True)
+class EmployeeScheduleSummary:
+    employee_id: str
+    employee_name: str
+    contract_days: int
+    assigned_days: int
+    difference: int
+    early_count: int
+    late_count: int
+    max_consecutive_days: int
+    manager_assignment_count: int
