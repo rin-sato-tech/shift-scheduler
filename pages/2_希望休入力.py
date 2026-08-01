@@ -16,44 +16,11 @@ from src.repositories import (
     list_day_off_requests,
     list_employees,
 )
-
-
-MESSAGE_KEY = "day_off_operation_message"
-MESSAGE_TYPE_KEY = (
-    "day_off_operation_message_type"
+from src.ui_helpers import (
+    select_target_month,
+    show_flash_message,
+    set_flash_message,
 )
-
-
-def set_operation_message(
-    message: str,
-    *,
-    succeeded: bool,
-) -> None:
-    st.session_state[MESSAGE_KEY] = message
-    st.session_state[MESSAGE_TYPE_KEY] = (
-        "success"
-        if succeeded
-        else "error"
-    )
-
-
-def show_operation_message() -> None:
-    message = st.session_state.pop(
-        MESSAGE_KEY,
-        None,
-    )
-    message_type = st.session_state.pop(
-        MESSAGE_TYPE_KEY,
-        None,
-    )
-
-    if message is None:
-        return
-
-    if message_type == "success":
-        st.success(message)
-    else:
-        st.error(message)
 
 
 def build_request_dataframe(
@@ -69,9 +36,7 @@ def build_request_dataframe(
     rows = []
 
     for request in requests:
-        employee = get_employee(
-            request.employee_id
-        )
+        employee = get_employee(request.employee_id)
 
         rows.append(
             {
@@ -81,9 +46,7 @@ def build_request_dataframe(
                         request.target_date.weekday()
                     ]
                 ),
-                "従業員ID": (
-                    request.employee_id
-                ),
+                "従業員ID": request.employee_id,
                 "氏名": (
                     employee.name
                     if employee is not None
@@ -121,80 +84,27 @@ st.set_page_config(
 )
 
 st.title("希望休入力")
+st.caption("従業員ごとの希望休を登録・削除します。")
 
-st.caption(
-    "従業員ごとの希望休を登録・削除します。"
+show_flash_message(key="day_off_flash")
+
+selected_year, selected_month, target_month = (
+    select_target_month(key_prefix="day_off")
 )
 
-show_operation_message()
+last_day = calendar.monthrange(selected_year, selected_month)[1]
 
-today = date.today()
-
-month_column1, month_column2 = (
-    st.columns(2)
-)
-
-year_options = list(
-    range(
-        today.year - 1,
-        today.year + 3,
-    )
-)
-
-selected_year = (
-    month_column1.selectbox(
-        "対象年",
-        options=year_options,
-        index=year_options.index(
-            today.year
-        ),
-    )
-)
-
-selected_month = (
-    month_column2.selectbox(
-        "対象月",
-        options=list(range(1, 13)),
-        index=today.month - 1,
-        format_func=lambda value: (
-            f"{value}月"
-        ),
-    )
-)
-
-target_month = (
-    f"{selected_year:04d}-"
-    f"{selected_month:02d}"
-)
-
-last_day = calendar.monthrange(
-    selected_year,
-    selected_month,
-)[1]
-
-month_start = date(
-    selected_year,
-    selected_month,
-    1,
-)
-
-month_end = date(
-    selected_year,
-    selected_month,
-    last_day,
-)
+month_start = date(selected_year, selected_month, 1)
+month_end = date(selected_year, selected_month, last_day)
 
 employees = list_employees()
 
 active_employees = [
-    employee
-    for employee in employees
+    employee for employee in employees
     if employee.is_active
 ]
 
-requests = list_day_off_requests(
-    target_month
-)
+requests = list_day_off_requests(target_month)
 
 request_employee_ids = {
     request.employee_id
@@ -202,63 +112,51 @@ request_employee_ids = {
 }
 
 metric1, metric2, metric3 = st.columns(3)
-
 metric1.metric(
     "有効従業員数",
     len(active_employees),
 )
-
 metric2.metric(
     "希望休登録件数",
     len(requests),
 )
-
 metric3.metric(
     "登録済み従業員数",
     len(request_employee_ids),
 )
 
 st.divider()
+
 st.subheader("希望休を登録")
 
 if not active_employees:
-    st.warning(
-        "有効な従業員が登録されていません。"
-    )
+    st.warning("有効な従業員が登録されていません。")
 else:
     employee_options = {
         (
-            f"{employee.employee_id}"
-            f"｜{employee.name}"
+            f"{employee.employee_id}｜{employee.name}"
         ): employee.employee_id
         for employee in active_employees
     }
 
     with st.form(
-        key=(
-            "day_off_create_form_"
-            f"{target_month}"
-        )
+        key=f"day_off_create_form_{target_month}"
     ):
+        employee_column, date_column = (st.columns(2))
         selected_employee_label = (
-            st.selectbox(
+            employee_column.selectbox(
                 "従業員",
-                options=list(
-                    employee_options.keys()
-                ),
+                options=list(employee_options.keys()),
             )
         )
 
-        selected_date = st.date_input(
+        selected_date = date_column.date_input(
             "希望休の日付",
             value=month_start,
             min_value=month_start,
             max_value=month_end,
             format="YYYY/MM/DD",
-            key=(
-                "day_off_date_"
-                f"{target_month}"
-            ),
+            key=f"day_off_date_{target_month}"
         )
 
         create_submitted = (
@@ -269,9 +167,7 @@ else:
         )
 
     if create_submitted:
-        employee_id = employee_options[
-            selected_employee_label
-        ]
+        employee_id = employee_options[selected_employee_label]
 
         result = register_day_off_request(
             employee_id=employee_id,
@@ -280,23 +176,23 @@ else:
         )
 
         if result.succeeded:
-            set_operation_message(
-                result.message,
-                succeeded=True,
+            set_flash_message(
+                key="day_off_flash",
+                message=result.message,
             )
             st.rerun()
         else:
             st.error(result.message)
 
 st.divider()
+
 st.subheader("登録済み希望休")
 
 filter_options = {
     "すべて": None,
     **{
         (
-            f"{employee.employee_id}"
-            f"｜{employee.name}"
+            f"{employee.employee_id}｜{employee.name}"
         ): employee.employee_id
         for employee in employees
     },
@@ -307,9 +203,7 @@ selected_filter_label = st.selectbox(
     options=list(filter_options.keys()),
 )
 
-selected_filter_id = filter_options[
-    selected_filter_label
-]
+selected_filter_id = filter_options[selected_filter_label]
 
 request_df = build_request_dataframe(
     target_month,
@@ -317,10 +211,7 @@ request_df = build_request_dataframe(
 )
 
 if request_df.empty:
-    st.info(
-        "対象月の希望休は"
-        "まだ登録されていません。"
-    )
+    st.info("対象月の希望休は、まだ登録されていません。")
 else:
     st.dataframe(
         request_df,
@@ -330,21 +221,15 @@ else:
 
 st.markdown("#### 希望休を削除")
 
-requests = list_day_off_requests(
-    target_month
-)
+requests = list_day_off_requests(target_month)
 
 if not requests:
-    st.caption(
-        "削除できる希望休はありません。"
-    )
+    st.caption("削除できる希望休はありません。")
 else:
     request_options = {}
 
     for request in requests:
-        employee = get_employee(
-            request.employee_id
-        )
+        employee = get_employee(request.employee_id)
 
         employee_name = (
             employee.name
@@ -362,35 +247,24 @@ else:
 
     selected_request_label = st.selectbox(
         "削除対象",
-        options=list(
-            request_options.keys()
-        ),
+        options=list(request_options.keys()),
     )
 
-    selected_request = request_options[
-        selected_request_label
-    ]
+    selected_request = request_options[selected_request_label]
 
     if st.button(
         "選択した希望休を削除",
-        key=(
-            "delete_day_off_"
-            f"{target_month}"
-        ),
+        key=f"delete_day_off_{target_month}"
     ):
         result = remove_day_off_request(
-            employee_id=(
-                selected_request.employee_id
-            ),
-            target_date=(
-                selected_request.target_date
-            ),
+            employee_id=(selected_request.employee_id),
+            target_date=(selected_request.target_date),
         )
 
         if result.succeeded:
-            set_operation_message(
-                result.message,
-                succeeded=True,
+            set_flash_message(
+                key="day_off_flash",
+                message=result.message,
             )
             st.rerun()
         else:
