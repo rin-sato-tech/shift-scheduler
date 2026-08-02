@@ -116,3 +116,35 @@ Solverが生成した結果は、
 `validate_schedule()`で再検証する。
 
 ハード制約違反が検出された場合はDBへ保存しない。
+
+```mermaid
+flowchart LR
+    User[利用者]
+
+    subgraph UI[Streamlit UI]
+        App[app.py]
+        Pages[pages/]
+    end
+
+    subgraph Application[Application Layer]
+        Services[Service modules]
+        Validation[Validation]
+        View[View conversion]
+    end
+
+    subgraph Data[Data Layer]
+        Repositories[repositories.py]
+        SQLite[(SQLite)]
+    end
+
+    Solver[Google OR-Tools]
+
+    User --> App
+    App --> Pages
+    Pages --> Services
+    Pages --> View
+    Services --> Validation
+    Services --> Solver
+    Services --> Repositories
+    Repositories --> SQLite
+```
