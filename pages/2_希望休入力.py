@@ -48,16 +48,11 @@ def build_request_dataframe(
                 ),
                 "従業員ID": request.employee_id,
                 "氏名": (
-                    employee.name
-                    if employee is not None
-                    else "不明"
+                    employee.name if employee is not None else "不明"
                 ),
                 "状態": (
                     "有効"
-                    if (
-                        employee is not None
-                        and employee.is_active
-                    )
+                    if employee is not None and employee.is_active
                     else "無効"
                 ),
             }
@@ -231,11 +226,7 @@ else:
     for request in requests:
         employee = get_employee(request.employee_id)
 
-        employee_name = (
-            employee.name
-            if employee is not None
-            else "不明"
-        )
+        employee_name = employee.name if employee is not None else "不明"
 
         label = (
             f"{request.target_date:%Y/%m/%d}"

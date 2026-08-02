@@ -146,20 +146,14 @@ with st.form(
         min_value=month_start,
         max_value=month_end,
         format="YYYY/MM/DD",
-        key=(
-            f"manual_change_date_{target_month}"
-        ),
+        key=f"manual_change_date_{target_month}",
     )
 
     selected_employee_label = (
         employee_column.selectbox(
             "従業員",
-            options=list(
-                employee_options.keys()
-            ),
-            key=(
-                f"manual_change_employee_{target_month}"
-            ),
+            options=list(employee_options.keys()),
+            key=f"manual_change_employee_{target_month}",
         )
     )
 
@@ -170,9 +164,7 @@ with st.form(
             "遅番",
             "休み",
         ],
-        key=(
-            f"manual_change_shift_{target_month}"
-        ),
+        key=f"manual_change_shift_{target_month}",
     )
 
     change_submitted = (
@@ -198,9 +190,7 @@ if change_submitted:
         assignments=draft_assignments,
         employee_id=employee_id,
         target_date=selected_date,
-        new_shift=shift_value_map[
-            new_shift_label
-        ],
+        new_shift=shift_value_map[new_shift_label],
     )
 
     if result.succeeded:
@@ -226,10 +216,8 @@ current_assignment = next(
         assignment
         for assignment in draft_assignments
         if (
-            assignment.employee_id
-            == selected_employee_id
-            and assignment.target_date
-            == selected_date
+            assignment.employee_id == selected_employee_id
+            and assignment.target_date == selected_date
         )
     ),
     None,
@@ -240,10 +228,7 @@ current_shift = (
     if current_assignment is None
     else (
         "早番"
-        if (
-            current_assignment.shift_type
-            == "early"
-        )
+        if current_assignment.shift_type == "early"
         else "遅番"
     )
 )
@@ -260,12 +245,10 @@ draft_issues = validate_manual_schedule(
 
 show_validation_issues(
     draft_issues,
-    empty_message=("編集案に制約違反や警告はありません。"),
+    empty_message="編集案に制約違反や警告はありません。",
 )
 
-original_assignments = (
-    st.session_state[original_key]
-)
+original_assignments = st.session_state[original_key]
 
 change_df = build_change_dataframe(
     original=original_assignments,
@@ -341,9 +324,7 @@ if reset_column.button(
 
     set_flash_message(
         key="manual_schedule_flash",
-        message=(
-            "編集案を破棄し、保存済みシフトへ戻しました。"
-        ),
+        message="編集案を破棄し、保存済みシフトへ戻しました。",
         level="info",
     )
 

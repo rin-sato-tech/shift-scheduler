@@ -4,7 +4,13 @@ import sqlite3
 from pathlib import Path
 
 
-DB_PATH = Path("data/shift_scheduler.db")
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+
+DB_PATH = (
+    PROJECT_ROOT
+    / "data"
+    / "shift_scheduler.db"
+)
 
 
 def get_connection() -> sqlite3.Connection:
@@ -105,6 +111,7 @@ def init_db() -> None:
             );
             """
         )
+
 
 if __name__ == "__main__":
     init_db()

@@ -22,7 +22,6 @@ def select_target_month(
     year_range_before: int = 1,
     year_range_after: int = 2,
 ) -> tuple[int, int, str]:
-
     today = date.today()
 
     year_options = list(
@@ -182,11 +181,20 @@ def show_flash_message(
         None,
     )
 
-    if flash is None:
+    if not isinstance(flash, dict):
         return
 
-    message = flash["message"]
-    level = flash["level"]
+    message = str(
+        flash.get("message", "")
+    )
+
+    level = flash.get(
+        "level",
+        "info",
+    )
+
+    if not message:
+        return
 
     if level == "success":
         st.success(message)

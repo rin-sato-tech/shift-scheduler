@@ -55,9 +55,7 @@ st.caption("従業員、希望休、必要人数設定をもとに月間シフ�
 
 # 対象年月選択
 selected_year, selected_month, target_month = (
-    select_target_month(
-        key_prefix="generation",
-    )
+    select_target_month(key_prefix="generation")
 )
 
 st.info(f"生成対象：{selected_year}年{selected_month}月")
@@ -102,10 +100,7 @@ metric3.metric(
 )
 metric4.metric(
     "必要人数設定",
-    (
-        f"{len(requirements)}"
-        f" / {expected_requirement_count}"
-    ),
+    f"{len(requirements)} / {expected_requirement_count}",
 )
 
 if len(requirements) < expected_requirement_count:
@@ -118,9 +113,7 @@ if len(requirements) < expected_requirement_count:
 st.divider()
 st.subheader("生成前チェック")
 
-pre_issues = (
-    validate_month_generation_inputs(target_month)
-)
+pre_issues = validate_month_generation_inputs(target_month)
 
 show_validation_issues(
     pre_issues,
@@ -142,9 +135,7 @@ max_time_seconds = st.selectbox(
     ),
 )
 
-existing_assignments = (
-    list_schedule_assignments(target_month)
-)
+existing_assignments = list_schedule_assignments(target_month)
 
 if existing_assignments:
     st.warning(
@@ -163,9 +154,7 @@ if existing_assignments:
     )
 
 # 生成ボタン
-generation_running_key = (
-    f"generation_running_{target_month}"
-)
+generation_running_key = f"generation_running_{target_month}"
 
 is_generation_running = (
     st.session_state.get(
@@ -203,9 +192,7 @@ if generate_clicked:
             result = (
                 generate_month_schedule(
                     target_month,
-                    max_time_seconds=float(
-                        max_time_seconds
-                    ),
+                    max_time_seconds=float(max_time_seconds),
                     num_search_workers=1,
                 )
             )
@@ -237,16 +224,12 @@ if generation_result is not None:
     else:
         st.error("シフトを生成できませんでした。")
 
-    solver_result = (
-        generation_result.solver_result
-    )
+    solver_result = generation_result.solver_result
 
     if solver_result is None:
         st.info("入力エラーにより、""Solverは実行されませんでした。")
     else:
-        solver_status = (
-            solver_result.status
-        )
+        solver_status = solver_result.status
 
         status_label = (
             SOLVER_STATUS_LABELS.get(
@@ -306,21 +289,14 @@ if generation_result is not None:
             )
 
     show_validation_issues(
-        list(
-            generation_result
-            .validation_issues
-        ),
-        empty_message=(
-            "生成結果に制約違反や警告はありません。"
-        ),
+        list(generation_result.validation_issues),
+        empty_message=("生成結果に制約違反や警告はありません。"),
     )
 
 # 保存済みシフト取得
 
 # 月間シフト表
-assignments = list_schedule_assignments(
-    target_month
-)
+assignments = list_schedule_assignments(target_month)
 
 employee_map = {
     employee.employee_id: employee
@@ -395,16 +371,12 @@ if not assignments:
     st.info("検証対象のシフトがありません。")
 else:
     schedule_issues = (
-        validate_month_schedule(
-            target_month
-        )
+        validate_month_schedule(target_month)
     )
 
     show_validation_issues(
         schedule_issues,
-        empty_message=(
-            "保存済みシフトはすべての検証を通過しています。"
-        ),
+        empty_message=("保存済みシフトはすべての検証を通過しています。"),
     )
 
 # 従業員別勤務集計
@@ -414,15 +386,8 @@ st.subheader("従業員別勤務集計")
 if not assignments:
     st.info("集計対象のシフトがありません。")
 else:
-    summaries = (
-        get_month_employee_summaries(
-            target_month
-        )
-    )
-
-    summary_df = (
-        build_summary_dataframe(summaries)
-    )
+    summaries = get_month_employee_summaries(target_month)
+    summary_df = build_summary_dataframe(summaries)
 
     st.dataframe(
         summary_df,

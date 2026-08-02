@@ -57,12 +57,8 @@ def build_staffing_dataframe(
                 "曜日": WEEKDAY_LABELS[
                     requirement.target_date.weekday()
                 ],
-                "シフト": SHIFT_LABELS[
-                    requirement.shift_type
-                ],
-                "シフトコード": (
-                    requirement.shift_type
-                ),
+                "シフト": SHIFT_LABELS[requirement.shift_type],
+                "シフトコード": requirement.shift_type,
                 "必要人数": required_count,
                 "必要責任者数": manager_count,
             }
@@ -90,15 +86,9 @@ def dataframe_to_requirements(
         requirements.append(
             StaffingRequirement(
                 target_date=target_date,
-                shift_type=(
-                    row["シフトコード"]
-                ),
-                required_count=int(
-                    row["必要人数"]
-                ),
-                required_manager_count=int(
-                    row["必要責任者数"]
-                ),
+                shift_type=row["シフトコード"],
+                required_count=int(row["必要人数"]),
+                required_manager_count=int(row["必要責任者数"]),
             )
         )
 
@@ -151,21 +141,14 @@ bulk_manager_count = (
 if st.button(
     "表全体に一括反映"
 ):
-    if (
-        bulk_manager_count
-        > bulk_required_count
-    ):
+    if bulk_manager_count > bulk_required_count:
         st.error("必要責任者数は必要人数以下にしてください。")
     else:
         st.session_state[
             f"staffing_override_{target_month}"
         ] = {
-            "required_count": int(
-                bulk_required_count
-            ),
-            "required_manager_count": int(
-                bulk_manager_count
-            ),
+            "required_count": int(bulk_required_count),
+            "required_manager_count": int(bulk_manager_count),
         }
 
         st.session_state.pop(
@@ -238,17 +221,9 @@ if not invalid_rows.empty:
         "必要責任者数が必要人数を超えています。"
     )
 
-total_required = int(
-    edited_df["必要人数"].sum()
-)
-
-total_manager_required = int(
-    edited_df["必要責任者数"].sum()
-)
-
-maximum_required = int(
-    edited_df["必要人数"].max()
-)
+total_required = int(edited_df["必要人数"].sum())
+total_manager_required = int(edited_df["必要責任者数"].sum())
+maximum_required = int(edited_df["必要人数"].max())
 
 metric1, metric2, metric3 = (
     st.columns(3)
@@ -276,9 +251,7 @@ if button_column1.button(
     type="primary",
     disabled=not invalid_rows.empty,
 ):
-    requirements = (
-        dataframe_to_requirements(edited_df)
-    )
+    requirements = dataframe_to_requirements(edited_df)
 
     result = (
         save_month_staffing_requirements(

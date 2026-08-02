@@ -27,9 +27,7 @@ selected_year, selected_month, target_month = (
     select_target_month(key_prefix="export")
 )
 
-assignments = list_schedule_assignments(
-    target_month
-)
+assignments = list_schedule_assignments(target_month)
 
 if not assignments:
     st.warning(
@@ -38,9 +36,7 @@ if not assignments:
     )
     st.stop()
 
-export_data = get_schedule_export_data(
-    target_month
-)
+export_data = get_schedule_export_data(target_month)
 
 st.success(
     f"{selected_year}年{selected_month}月の"
@@ -63,9 +59,7 @@ st.dataframe(
 
 st.download_button(
     label="月間シフト表をダウンロード",
-    data=dataframe_to_csv_bytes(
-        export_data.schedule_table
-    ),
+    data=dataframe_to_csv_bytes(export_data.schedule_table),
     file_name=build_export_filename(
         target_month=target_month,
         data_type="monthly",
@@ -87,9 +81,7 @@ st.dataframe(
 
 st.download_button(
     label="配置明細をダウンロード",
-    data=dataframe_to_csv_bytes(
-        export_data.assignment_detail
-    ),
+    data=dataframe_to_csv_bytes(export_data.assignment_detail),
     file_name=build_export_filename(
         target_month=target_month,
         data_type="detail",
@@ -100,10 +92,7 @@ st.download_button(
 st.divider()
 st.subheader("従業員別勤務集計")
 
-st.caption(
-    "契約勤務日数との差、早番・遅番回数、"
-    "最大連続勤務日数を出力します。"
-)
+st.caption("契約勤務日数との差、早番・遅番回数、最大連続勤務日数を出力します。")
 
 st.dataframe(
     export_data.employee_summary,
@@ -113,9 +102,7 @@ st.dataframe(
 
 st.download_button(
     label="勤務集計をダウンロード",
-    data=dataframe_to_csv_bytes(
-        export_data.employee_summary
-    ),
+    data=dataframe_to_csv_bytes(export_data.employee_summary),
     file_name=build_export_filename(
         target_month=target_month,
         data_type="summary",

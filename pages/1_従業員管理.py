@@ -3,6 +3,7 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
+from src.db import init_db
 from src.employee_service import (
     change_employee_active_status,
     edit_employee,
@@ -23,27 +24,17 @@ def build_employee_dataframe() -> pd.DataFrame:
             "従業員ID": employee.employee_id,
             "氏名": employee.name,
             "責任者": (
-                "はい"
-                if employee.is_manager
-                else "いいえ"
+                "はい" if employee.is_manager else "いいえ"
             ),
-            "契約勤務日数": (
-                employee.contract_days
-            ),
+            "契約勤務日数": employee.contract_days,
             "早番": (
-                "可"
-                if employee.can_work_early
-                else "不可"
+                "可" if employee.can_work_early else "不可"
             ),
             "遅番": (
-                "可"
-                if employee.can_work_late
-                else "不可"
+                "可" if employee.can_work_late else "不可"
             ),
             "状態": (
-                "有効"
-                if employee.is_active
-                else "無効"
+                "有効" if employee.is_active else "無効"
             ),
         }
         for employee in employees
@@ -63,6 +54,8 @@ def build_employee_dataframe() -> pd.DataFrame:
     )
 
 
+init_db()
+
 st.set_page_config(
     page_title="従業員管理",
     page_icon="👥",
@@ -70,7 +63,6 @@ st.set_page_config(
 )
 
 st.title("従業員管理")
-
 st.caption("従業員の登録、編集、有効状態の変更を行います。")
 
 show_flash_message(key="employee_flash")
@@ -83,8 +75,7 @@ active_count = sum(
 )
 
 manager_count = sum(
-    employee.is_active
-    and employee.is_manager
+    employee.is_active and employee.is_manager
     for employee in employees
 )
 
@@ -122,11 +113,9 @@ with st.form(
     "employee_create_form",
     clear_on_submit=True,
 ):
-    (
-        id_column,
-        name_column,
-        contract_days_column,
-    ) = st.columns(3)
+    id_column, name_column, contract_days_column = (
+        st.columns(3)
+    )
 
     create_id = id_column.text_input(
         "従業員ID",
@@ -150,9 +139,7 @@ with st.form(
         )
     )
 
-    create_is_manager = st.checkbox(
-        "責任者として扱う"
-    )
+    create_is_manager = st.checkbox("責任者として扱う")
 
     shift_column1, shift_column2 = (
         st.columns(2)
@@ -227,16 +214,11 @@ selected_label = st.selectbox(
 selected_employee = employee_options[selected_label]
 
 with st.form(
-    key=(
-        "employee_edit_form_"
-        f"{selected_employee.employee_id}"
-    )
+    key=f"employee_edit_form_{selected_employee.employee_id}"
 ):
-    (
-        id_column,
-        name_column,
-        contract_days_column,
-    ) = st.columns(3)
+    id_column, name_column, contract_days_column = (
+        st.columns(3)
+    )
 
     id_column.text_input(
         "従業員ID",
@@ -272,18 +254,14 @@ with st.form(
     edit_can_work_early = (
         edit_column1.checkbox(
             "早番勤務可能",
-            value=(
-                selected_employee.can_work_early
-            ),
+            value=selected_employee.can_work_early,
         )
     )
 
     edit_can_work_late = (
         edit_column2.checkbox(
             "遅番勤務可能",
-            value=(
-                selected_employee.can_work_late
-            ),
+            value=selected_employee.can_work_late,
         )
     )
 
@@ -296,7 +274,7 @@ with st.form(
 
 if edit_submitted:
     result = edit_employee(
-        employee_id=(selected_employee.employee_id),
+        employee_id=selected_employee.employee_id,
         name=edit_name,
         is_manager=edit_is_manager,
         contract_days=int(edit_contract_days),
@@ -316,9 +294,7 @@ if edit_submitted:
 st.markdown("#### 有効状態")
 
 current_status = (
-    "有効"
-    if selected_employee.is_active
-    else "無効"
+    "有効" if selected_employee.is_active else "無効"
 )
 
 st.write(f"現在の状態：**{current_status}**")
@@ -332,14 +308,11 @@ if selected_employee.is_active:
     if st.button(
         "この従業員を無効化",
         type="secondary",
-        key=(
-            "deactivate_"
-            f"{selected_employee.employee_id}"
-        ),
+        key=f"deactivate_{selected_employee.employee_id}",
     ):
         result = (
             change_employee_active_status(
-                employee_id=(selected_employee.employee_id),
+                employee_id=selected_employee.employee_id,
                 is_active=False,
             )
         )
@@ -347,11 +320,7 @@ if selected_employee.is_active:
         set_flash_message(
             key="employee_flash",
             message=result.message,
-            level=(
-                "success"
-                if result.succeeded
-                else "error"
-            ),
+            level="success" if result.succeeded else "error",
         )
         st.rerun()
 
@@ -359,16 +328,11 @@ else:
     if st.button(
         "この従業員を再有効化",
         type="primary",
-        key=(
-            "activate_"
-            f"{selected_employee.employee_id}"
-        ),
+        key=f"activate_{selected_employee.employee_id}",
     ):
         result = (
             change_employee_active_status(
-                employee_id=(
-                    selected_employee.employee_id
-                ),
+                employee_id=selected_employee.employee_id,
                 is_active=True,
             )
         )
@@ -376,10 +340,6 @@ else:
         set_flash_message(
             key="employee_flash",
             message=result.message,
-            level=(
-                "success"
-                if result.succeeded
-                else "error"
-            ),
+            level="success" if result.succeeded else "error",
         )
         st.rerun()
