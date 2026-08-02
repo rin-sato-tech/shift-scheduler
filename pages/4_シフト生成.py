@@ -8,11 +8,6 @@ import pandas as pd
 import streamlit as st
 
 from src.db import init_db
-from src.models import (
-    Employee,
-    EmployeeScheduleSummary,
-    ScheduleAssignment,
-)
 from src.repositories import (
     list_day_off_requests,
     list_employees,
@@ -25,6 +20,11 @@ from src.schedule_service import (
     validate_month_generation_inputs,
     validate_month_schedule,
 )
+from src.schedule_view import (
+    build_assignment_dataframe,
+    build_month_schedule_table,
+    build_summary_dataframe,
+)
 from src.ui_helpers import (
     select_target_month,
     show_validation_issues,
@@ -32,16 +32,6 @@ from src.ui_helpers import (
 from src.validation import has_errors
 
 # 定数
-WEEKDAY_LABELS = (
-    "月",
-    "火",
-    "水",
-    "木",
-    "金",
-    "土",
-    "日",
-)
-
 SOLVER_STATUS_LABELS = {
     "OPTIMAL": "最適解",
     "FEASIBLE": "実行可能解",
@@ -49,212 +39,6 @@ SOLVER_STATUS_LABELS = {
     "MODEL_INVALID": "モデル不正",
     "UNKNOWN": "結果未確定",
 }
-
-# 表示補助関数
-def build_schedule_table(
-    *,
-    year: int,
-    month: int,
-    assignments: list[
-        ScheduleAssignment
-    ],
-    employee_map: dict[
-        str,
-        Employee,
-    ],
-) -> pd.DataFrame:
-    last_day = calendar.monthrange(
-        year,
-        month,
-    )[1]
-
-    assignment_map: dict[
-        tuple[date, str],
-        list[str],
-    ] = {}
-
-    for assignment in assignments:
-        key = (
-            assignment.target_date,
-            assignment.shift_type,
-        )
-
-        employee = employee_map.get(
-            assignment.employee_id
-        )
-
-        employee_label = (
-            employee.name
-            if employee is not None
-            else assignment.employee_id
-        )
-
-        assignment_map.setdefault(
-            key,
-            [],
-        ).append(employee_label)
-
-    rows = []
-
-    for day in range(
-        1,
-        last_day + 1,
-    ):
-        target_date = date(
-            year,
-            month,
-            day,
-        )
-
-        early_names = assignment_map.get(
-            (target_date, "early"),
-            [],
-        )
-
-        late_names = assignment_map.get(
-            (target_date, "late"),
-            [],
-        )
-
-        rows.append(
-            {
-                "日付": target_date,
-                "曜日": WEEKDAY_LABELS[
-                    target_date.weekday()
-                ],
-                "早番": "、".join(
-                    early_names
-                ),
-                "遅番": "、".join(
-                    late_names
-                ),
-            }
-        )
-
-    return pd.DataFrame(rows)
-
-
-def build_assignment_dataframe(
-    assignments: list[
-        ScheduleAssignment
-    ],
-    employee_map: dict[
-        str,
-        Employee,
-    ],
-) -> pd.DataFrame:
-    rows = []
-
-    for assignment in assignments:
-        employee = employee_map.get(
-            assignment.employee_id
-        )
-
-        rows.append(
-            {
-                "日付": (
-                    assignment.target_date
-                ),
-                "曜日": WEEKDAY_LABELS[
-                    assignment
-                    .target_date
-                    .weekday()
-                ],
-                "シフト": (
-                    "早番"
-                    if (
-                        assignment.shift_type
-                        == "early"
-                    )
-                    else "遅番"
-                ),
-                "従業員ID": (
-                    assignment.employee_id
-                ),
-                "氏名": (
-                    employee.name
-                    if employee is not None
-                    else "不明"
-                ),
-                "責任者": (
-                    "はい"
-                    if (
-                        employee is not None
-                        and employee.is_manager
-                    )
-                    else "いいえ"
-                ),
-                "手動変更": (
-                    "はい"
-                    if assignment.is_manual
-                    else "いいえ"
-                ),
-            }
-        )
-
-    return pd.DataFrame(rows)
-
-
-def build_summary_dataframe(
-    summaries: list[
-        EmployeeScheduleSummary
-    ],
-    employee_map: dict[
-        str,
-        Employee,
-    ],
-) -> pd.DataFrame:
-    rows = []
-
-    for summary in summaries:
-        employee = employee_map.get(
-            summary.employee_id
-        )
-
-        rows.append(
-            {
-                "従業員ID": (
-                    summary.employee_id
-                ),
-                "氏名": (
-                    employee.name
-                    if employee is not None
-                    else "不明"
-                ),
-                "契約勤務日数": (
-                    employee.contract_days
-                    if employee is not None
-                    else 0
-                ),
-                "割当勤務日数": (
-                    summary.assigned_days
-                ),
-                "差": (
-                    summary.assigned_days
-                    - (
-                        employee.contract_days
-                        if employee is not None
-                        else 0
-                    )
-                ),
-                "早番": (
-                    summary.early_count
-                ),
-                "遅番": (
-                    summary.late_count
-                ),
-                "最大連続勤務": (
-                    summary
-                    .max_consecutive_days
-                ),
-                "責任者配置": (
-                    summary
-                    .manager_assignment_count
-                ),
-            }
-        )
-
-    return pd.DataFrame(rows)
 
 
 # DB初期化・ページ設定
@@ -549,7 +333,7 @@ st.subheader("月間シフト")
 if not assignments:
     st.info("対象月のシフトはまだ生成されていません。")
 else:
-    schedule_df = build_schedule_table(
+    schedule_df = build_month_schedule_table(
         year=selected_year,
         month=selected_month,
         assignments=assignments,
@@ -592,8 +376,8 @@ if assignments:
     ):
         assignment_df = (
             build_assignment_dataframe(
-                assignments,
-                employee_map,
+                assignments=assignments,
+                employee_map=employee_map,
             )
         )
 
@@ -637,10 +421,7 @@ else:
     )
 
     summary_df = (
-        build_summary_dataframe(
-            summaries,
-            employee_map,
-        )
+        build_summary_dataframe(summaries)
     )
 
     st.dataframe(

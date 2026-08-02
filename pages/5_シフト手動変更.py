@@ -3,7 +3,6 @@ from __future__ import annotations
 import calendar
 from datetime import date
 
-import pandas as pd
 import streamlit as st
 
 from src.db import init_db
@@ -12,13 +11,14 @@ from src.manual_schedule_service import (
     save_manual_schedule,
     validate_manual_schedule,
 )
-from src.models import (
-    Employee,
-    ScheduleAssignment,
-)
+from src.models import ScheduleAssignment
 from src.repositories import (
     list_employees,
     list_schedule_assignments,
+)
+from src.schedule_view import (
+    build_change_dataframe,
+    build_month_schedule_table,
 )
 from src.ui_helpers import (
     select_target_month,
@@ -86,112 +86,16 @@ employee_map = {
     for employee in employees
 }
 
-WEEKDAY_LABELS = (
-    "月",
-    "火",
-    "水",
-    "木",
-    "金",
-    "土",
-    "日",
-)
-
-
-def build_schedule_dataframe(
-    *,
-    year: int,
-    month: int,
-    assignments: list[
-        ScheduleAssignment
-    ],
-    employee_map: dict[
-        str,
-        Employee,
-    ],
-) -> pd.DataFrame:
-    last_day = calendar.monthrange(
-        year,
-        month,
-    )[1]
-
-    grouped: dict[
-        tuple[date, str],
-        list[str],
-    ] = {}
-
-    for assignment in assignments:
-        employee = employee_map.get(
-            assignment.employee_id
-        )
-
-        name = (
-            employee.name
-            if employee is not None
-            else assignment.employee_id
-        )
-
-        if assignment.is_manual:
-            name = f"{name} ※"
-
-        grouped.setdefault(
-            (
-                assignment.target_date,
-                assignment.shift_type,
-            ),
-            [],
-        ).append(name)
-
-    rows = []
-
-    for day in range(
-        1,
-        last_day + 1,
-    ):
-        target_date = date(
-            year,
-            month,
-            day,
-        )
-
-        rows.append(
-            {
-                "日付": target_date,
-                "曜日": WEEKDAY_LABELS[
-                    target_date.weekday()
-                ],
-                "早番": "、".join(
-                    grouped.get(
-                        (
-                            target_date,
-                            "early",
-                        ),
-                        [],
-                    )
-                ),
-                "遅番": "、".join(
-                    grouped.get(
-                        (
-                            target_date,
-                            "late",
-                        ),
-                        [],
-                    )
-                ),
-            }
-        )
-
-    return pd.DataFrame(rows)
-
-
 st.subheader("編集中のシフト")
 
 st.caption("※は手動変更された配置です。")
 
-draft_df = build_schedule_dataframe(
+draft_df = build_month_schedule_table(
     year=selected_year,
     month=selected_month,
     assignments=draft_assignments,
     employee_map=employee_map,
+    show_manual_mark=True,
 )
 
 st.dataframe(
@@ -359,99 +263,14 @@ show_validation_issues(
     empty_message=("編集案に制約違反や警告はありません。"),
 )
 
-
-def assignment_key(
-    assignment: ScheduleAssignment,
-) -> tuple[date, str]:
-    return (
-        assignment.target_date,
-        assignment.employee_id,
-    )
-
-
-def build_change_dataframe(
-    original: list[ScheduleAssignment],
-    draft: list[ScheduleAssignment],
-    employee_map: dict[str, Employee],
-) -> pd.DataFrame:
-    original_map = {
-        assignment_key(assignment):
-        assignment
-        for assignment in original
-    }
-
-    draft_map = {
-        assignment_key(assignment):
-        assignment
-        for assignment in draft
-    }
-
-    all_keys = sorted(
-        set(original_map)
-        | set(draft_map)
-    )
-
-    rows = []
-
-    for key in all_keys:
-        before = original_map.get(key)
-        after = draft_map.get(key)
-
-        before_shift = (
-            before.shift_type
-            if before is not None
-            else "off"
-        )
-
-        after_shift = (
-            after.shift_type
-            if after is not None
-            else "off"
-        )
-
-        if before_shift == after_shift:
-            continue
-
-        target_date, employee_id = key
-
-        employee = employee_map.get(
-            employee_id
-        )
-
-        labels = {
-            "early": "早番",
-            "late": "遅番",
-            "off": "休み",
-        }
-
-        rows.append(
-            {
-                "日付": target_date,
-                "従業員ID": employee_id,
-                "氏名": (
-                    employee.name
-                    if employee is not None
-                    else "不明"
-                ),
-                "変更前": labels[
-                    before_shift
-                ],
-                "変更後": labels[
-                    after_shift
-                ],
-            }
-        )
-
-    return pd.DataFrame(rows)
-
 original_assignments = (
     st.session_state[original_key]
 )
 
 change_df = build_change_dataframe(
-    original_assignments,
-    draft_assignments,
-    employee_map,
+    original=original_assignments,
+    draft=draft_assignments,
+    employee_map=employee_map,
 )
 
 st.subheader("変更内容")
