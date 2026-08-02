@@ -15,11 +15,16 @@ from src.manual_schedule_service import (
 from src.models import (
     Employee,
     ScheduleAssignment,
-    ValidationIssue,
 )
 from src.repositories import (
     list_employees,
     list_schedule_assignments,
+)
+from src.ui_helpers import (
+    select_target_month,
+    set_flash_message,
+    show_flash_message,
+    show_validation_issues,
 )
 from src.validation import has_errors
 
@@ -33,66 +38,25 @@ st.set_page_config(
 
 st.title("シフト手動変更")
 
-st.caption(
-    "生成済みシフトを変更し、"
-    "制約を再検証して保存します。"
+st.caption("生成済みシフトを変更し、制約を再検証して保存します。")
+
+show_flash_message(key="manual_schedule_flash")
+
+selected_year, selected_month, target_month = (
+    select_target_month(key_prefix="manual")
 )
 
-today = date.today()
-
-year_options = list(
-    range(
-        today.year - 1,
-        today.year + 3,
-    )
-)
-
-year_column, month_column = st.columns(2)
-
-selected_year = year_column.selectbox(
-    "対象年",
-    options=year_options,
-    index=year_options.index(today.year),
-    key="manual_year",
-)
-
-selected_month = month_column.selectbox(
-    "対象月",
-    options=list(range(1, 13)),
-    index=today.month - 1,
-    format_func=lambda value: (
-        f"{value}月"
-    ),
-    key="manual_month",
-)
-
-target_month = (
-    f"{selected_year:04d}-"
-    f"{selected_month:02d}"
-)
-
-draft_key = (
-    f"manual_schedule_draft_"
-    f"{target_month}"
-)
-
-original_key = (
-    f"manual_schedule_original_"
-    f"{target_month}"
-)
+draft_key = (f"manual_schedule_draft_{target_month}")
+original_key = (f"manual_schedule_original_{target_month}")
 
 saved_assignments = (
-    list_schedule_assignments(
-        target_month
-    )
+    list_schedule_assignments(target_month)
 )
 
 if not saved_assignments:
     st.warning(
-        "対象月のシフトが"
-        "まだ生成されていません。"
-        "先にシフト生成画面で"
-        "自動生成してください。"
+        "対象月のシフトがまだ生成されていません。"
+        "先にシフト生成画面で自動生成してください。"
     )
     st.stop()
 
@@ -113,8 +77,7 @@ draft_assignments: list[
 employees = list_employees()
 
 active_employees = [
-    employee
-    for employee in employees
+    employee for employee in employees
     if employee.is_active
 ]
 
@@ -222,9 +185,7 @@ def build_schedule_dataframe(
 
 st.subheader("編集中のシフト")
 
-st.caption(
-    "※は手動変更された配置です。"
-)
+st.caption("※は手動変更された配置です。")
 
 draft_df = build_schedule_dataframe(
     year=selected_year,
@@ -261,8 +222,7 @@ month_end = date(
 
 employee_options = {
     (
-        f"{employee.employee_id}"
-        f"｜{employee.name}"
+        f"{employee.employee_id}｜{employee.name}"
     ): employee.employee_id
     for employee in active_employees
 }
@@ -270,30 +230,45 @@ employee_options = {
 with st.form(
     key=f"manual_change_form_{target_month}"
 ):
-    selected_date = st.date_input(
+    (
+        date_column,
+        employee_column,
+        shift_column,
+    ) = st.columns(3)
+
+    selected_date = date_column.date_input(
         "変更日",
         value=month_start,
         min_value=month_start,
         max_value=month_end,
         format="YYYY/MM/DD",
+        key=(
+            f"manual_change_date_{target_month}"
+        ),
     )
 
     selected_employee_label = (
-        st.selectbox(
+        employee_column.selectbox(
             "従業員",
             options=list(
                 employee_options.keys()
             ),
+            key=(
+                f"manual_change_employee_{target_month}"
+            ),
         )
     )
 
-    new_shift_label = st.selectbox(
+    new_shift_label = shift_column.selectbox(
         "変更後",
         options=[
             "早番",
             "遅番",
             "休み",
         ],
+        key=(
+            f"manual_change_shift_{target_month}"
+        ),
     )
 
     change_submitted = (
@@ -329,9 +304,12 @@ if change_submitted:
             result.assignments
         )
 
-        st.success(result.message)
-        st.rerun()
+        set_flash_message(
+            key="manual_schedule_flash",
+            message=result.message,
+        )
 
+        st.rerun()
     else:
         st.error(result.message)
 
@@ -366,9 +344,7 @@ current_shift = (
     )
 )
 
-st.info(
-    f"現在の配置：{current_shift}"
-)
+st.info(f"現在の配置：{current_shift}")
 
 st.divider()
 st.subheader("編集案の検証")
@@ -378,52 +354,10 @@ draft_issues = validate_manual_schedule(
     assignments=draft_assignments,
 )
 
-
-def show_validation_issues(
-    issues: list[ValidationIssue],
-) -> None:
-    errors = [
-        issue
-        for issue in issues
-        if issue.severity == "error"
-    ]
-
-    warnings = [
-        issue
-        for issue in issues
-        if issue.severity == "warning"
-    ]
-
-    if not errors and not warnings:
-        st.success(
-            "制約違反や警告はありません。"
-        )
-        return
-
-    if errors:
-        st.error(
-            f"エラーが{len(errors)}件あります。"
-        )
-
-        for issue in errors:
-            st.markdown(
-                f"- **{issue.rule_id}**："
-                f"{issue.message}"
-            )
-
-    if warnings:
-        st.warning(
-            f"警告が{len(warnings)}件あります。"
-        )
-
-        for issue in warnings:
-            st.markdown(
-                f"- **{issue.rule_id}**："
-                f"{issue.message}"
-            )
-
-
-show_validation_issues(draft_issues)
+show_validation_issues(
+    draft_issues,
+    empty_message=("編集案に制約違反や警告はありません。"),
+)
 
 
 def assignment_key(
@@ -523,9 +457,7 @@ change_df = build_change_dataframe(
 st.subheader("変更内容")
 
 if change_df.empty:
-    st.info(
-        "まだ変更されていません。"
-    )
+    st.info("まだ変更されていません。")
 else:
     st.dataframe(
         change_df,
@@ -564,9 +496,36 @@ if save_column.button(
             None,
         )
 
-        st.success(result.message)
+        set_flash_message(
+            key="manual_schedule_flash",
+            message=result.message,
+        )
+
         st.rerun()
 
     else:
         st.error(result.message)
 
+if reset_column.button(
+    "編集案を破棄",
+    disabled=not has_changes,
+):
+    st.session_state.pop(
+        draft_key,
+        None,
+    )
+
+    st.session_state.pop(
+        original_key,
+        None,
+    )
+
+    set_flash_message(
+        key="manual_schedule_flash",
+        message=(
+            "編集案を破棄し、保存済みシフトへ戻しました。"
+        ),
+        level="info",
+    )
+
+    st.rerun()
