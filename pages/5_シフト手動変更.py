@@ -131,6 +131,13 @@ employee_options = {
     for employee in active_employees
 }
 
+if not employee_options:
+    st.warning(
+        "配置を変更できる有効な従業員がいません。"
+        "従業員管理画面で従業員を再有効化してください。"
+    )
+    st.stop()
+
 with st.form(
     key=f"manual_change_form_{target_month}"
 ):
