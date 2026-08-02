@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from datetime import date
-
 import streamlit as st
 
 from src.db import init_db
@@ -10,9 +8,8 @@ from src.export_service import (
     dataframe_to_csv_bytes,
     get_schedule_export_data,
 )
-from src.repositories import (
-    list_schedule_assignments,
-)
+from src.repositories import list_schedule_assignments
+from src.ui_helpers import select_target_month
 
 init_db()
 
@@ -24,50 +21,10 @@ st.set_page_config(
 
 st.title("CSV出力")
 
-st.caption(
-    "保存済みの月間シフトと"
-    "勤務集計をCSV形式で出力します。"
-)
+st.caption("保存済みの月間シフトと勤務集計をCSV形式で出力します。")
 
-today = date.today()
-
-year_options = list(
-    range(
-        today.year - 1,
-        today.year + 3,
-    )
-)
-
-year_column, month_column = (
-    st.columns(2)
-)
-
-selected_year = (
-    year_column.selectbox(
-        "対象年",
-        options=year_options,
-        index=year_options.index(
-            today.year
-        ),
-        key="export_year",
-    )
-)
-
-selected_month = (
-    month_column.selectbox(
-        "対象月",
-        options=list(range(1, 13)),
-        index=today.month - 1,
-        format_func=lambda value: (
-            f"{value}月"
-        ),
-        key="export_month",
-    )
-)
-
-target_month = (
-    f"{selected_year:04d}-"
-    f"{selected_month:02d}"
+selected_year, selected_month, target_month = (
+    select_target_month(key_prefix="export")
 )
 
 assignments = list_schedule_assignments(
@@ -76,10 +33,8 @@ assignments = list_schedule_assignments(
 
 if not assignments:
     st.warning(
-        "対象月のシフトが"
-        "保存されていません。"
-        "先にシフト生成画面で"
-        "シフトを生成してください。"
+        "対象月のシフトが保存されていません。"
+        "先にシフト生成画面でシフトを生成してください。"
     )
     st.stop()
 
@@ -88,18 +43,15 @@ export_data = get_schedule_export_data(
 )
 
 st.success(
-    f"{selected_year}年"
-    f"{selected_month}月の"
-    f"{len(assignments)}件の配置を"
-    "出力できます。"
+    f"{selected_year}年{selected_month}月の"
+    f"{len(assignments)}件の配置を出力できます。"
 )
 
 st.divider()
 st.subheader("月間シフト表")
 
 st.caption(
-    "日付ごとの早番・遅番を"
-    "横並びで出力します。"
+    "日付ごとの早番・遅番を横並びで出力します。"
     "※は手動変更された配置です。"
 )
 
@@ -125,9 +77,7 @@ st.download_button(
 st.divider()
 st.subheader("配置明細")
 
-st.caption(
-    "1件の配置を1行として出力します。"
-)
+st.caption("1件の配置を1行として出力します。")
 
 st.dataframe(
     export_data.assignment_detail,
@@ -151,8 +101,7 @@ st.divider()
 st.subheader("従業員別勤務集計")
 
 st.caption(
-    "契約勤務日数との差、"
-    "早番・遅番回数、"
+    "契約勤務日数との差、早番・遅番回数、"
     "最大連続勤務日数を出力します。"
 )
 
