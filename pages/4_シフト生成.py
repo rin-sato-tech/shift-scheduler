@@ -12,7 +12,6 @@ from src.models import (
     Employee,
     EmployeeScheduleSummary,
     ScheduleAssignment,
-    ValidationIssue,
 )
 from src.repositories import (
     list_day_off_requests,
@@ -25,6 +24,10 @@ from src.schedule_service import (
     get_month_employee_summaries,
     validate_month_generation_inputs,
     validate_month_schedule,
+)
+from src.ui_helpers import (
+    select_target_month,
+    show_validation_issues,
 )
 from src.validation import has_errors
 
@@ -48,63 +51,6 @@ SOLVER_STATUS_LABELS = {
 }
 
 # 表示補助関数
-def split_validation_issues(
-    issues: list[ValidationIssue],
-) -> tuple[
-    list[ValidationIssue],
-    list[ValidationIssue],
-]:
-    errors = [
-        issue
-        for issue in issues
-        if issue.severity == "error"
-    ]
-
-    warnings = [
-        issue
-        for issue in issues
-        if issue.severity == "warning"
-    ]
-
-    return errors, warnings
-
-
-def show_validation_issues(
-    issues: list[ValidationIssue],
-    *,
-    empty_message: str,
-) -> None:
-    errors, warnings = (
-        split_validation_issues(issues)
-    )
-
-    if not errors and not warnings:
-        st.success(empty_message)
-        return
-
-    if errors:
-        st.error(
-            f"エラーが{len(errors)}件あります。"
-        )
-
-        for issue in errors:
-            st.markdown(
-                f"- **{issue.rule_id}**："
-                f"{issue.message}"
-            )
-
-    if warnings:
-        st.warning(
-            f"警告が{len(warnings)}件あります。"
-        )
-
-        for issue in warnings:
-            st.markdown(
-                f"- **{issue.rule_id}**："
-                f"{issue.message}"
-            )
-
-
 def build_schedule_table(
     *,
     year: int,
@@ -321,101 +267,55 @@ st.set_page_config(
 )
 
 st.title("シフト生成")
-
-st.caption(
-    "従業員、希望休、必要人数設定をもとに"
-    "月間シフトを自動生成します。"
-)
+st.caption("従業員、希望休、必要人数設定をもとに月間シフトを自動生成します。")
 
 # 対象年月選択
-today = date.today()
-
-year_options = list(
-    range(
-        today.year - 1,
-        today.year + 3,
+selected_year, selected_month, target_month = (
+    select_target_month(
+        key_prefix="generation",
     )
 )
 
-year_column, month_column = st.columns(2)
-
-selected_year = year_column.selectbox(
-    "対象年",
-    options=year_options,
-    index=year_options.index(today.year),
-    key="generation_year",
-)
-
-selected_month = month_column.selectbox(
-    "対象月",
-    options=list(range(1, 13)),
-    index=today.month - 1,
-    format_func=lambda value: f"{value}月",
-    key="generation_month",
-)
-
-target_month = (
-    f"{selected_year:04d}-"
-    f"{selected_month:02d}"
-)
-
-st.info(
-    f"生成対象："
-    f"{selected_year}年{selected_month}月"
-)
+st.info(f"生成対象：{selected_year}年{selected_month}月")
 
 # 入力データ件数
 employees = list_employees()
 active_employees = [
-    employee
-    for employee in employees
+    employee for employee in employees
     if employee.is_active
 ]
 
 active_managers = [
-    employee
-    for employee in active_employees
+    employee for employee in active_employees
     if employee.is_manager
 ]
 
-day_off_requests = list_day_off_requests(
-    target_month
-)
+day_off_requests = list_day_off_requests(target_month)
 
-requirements = list_staffing_requirements(
-    target_month
-)
+requirements = list_staffing_requirements(target_month)
 
 last_day = calendar.monthrange(
     selected_year,
     selected_month,
 )[1]
 
-expected_requirement_count = (
-    last_day * 2
-)
+expected_requirement_count = (last_day * 2)
 
 st.subheader("入力データ状況")
 
-metric1, metric2, metric3, metric4 = (
-    st.columns(4)
-)
-
+metric1, metric2, metric3, metric4 = (st.columns(4))
 metric1.metric(
     "有効従業員",
     len(active_employees),
 )
-
 metric2.metric(
     "有効責任者",
     len(active_managers),
 )
-
 metric3.metric(
     "希望休",
     len(day_off_requests),
 )
-
 metric4.metric(
     "必要人数設定",
     (
@@ -427,8 +327,7 @@ metric4.metric(
 if len(requirements) < expected_requirement_count:
     st.warning(
         "必要人数設定が不足しています。"
-        "必要人数設定画面で対象月の"
-        "全日付・全シフトを保存してください。"
+        "必要人数設定画面で対象月の全日付・全シフトを保存してください。"
     )
 
 # 生成前検証
@@ -436,17 +335,12 @@ st.divider()
 st.subheader("生成前チェック")
 
 pre_issues = (
-    validate_month_generation_inputs(
-        target_month
-    )
+    validate_month_generation_inputs(target_month)
 )
 
 show_validation_issues(
     pre_issues,
-    empty_message=(
-        "生成を妨げる入力エラーは"
-        "ありません。"
-    ),
+    empty_message=("生成を妨げる入力エラーはありません。"),
 )
 
 has_pre_errors = has_errors(pre_issues)
@@ -465,9 +359,7 @@ max_time_seconds = st.selectbox(
 )
 
 existing_assignments = (
-    list_schedule_assignments(
-        target_month
-    )
+    list_schedule_assignments(target_month)
 )
 
 if existing_assignments:
@@ -475,8 +367,7 @@ if existing_assignments:
         "対象月には既に"
         f"{len(existing_assignments)}件の"
         "シフトが保存されています。"
-        "再生成すると現在のシフトは"
-        "新しい生成結果に置き換わります。"
+        "再生成すると現在のシフトは新しい生成結果に置き換わります。"
     )
 
 confirm_regeneration = True
@@ -514,10 +405,7 @@ generate_clicked = st.button(
 )
 
 if has_pre_errors:
-    st.caption(
-        "生成前チェックのエラーを"
-        "解消すると実行できます。"
-    )
+    st.caption("生成前チェックのエラーを解消すると実行できます。")
 
 if generate_clicked:
     st.session_state[
@@ -539,8 +427,7 @@ if generate_clicked:
             )
 
         st.session_state[
-            f"generation_result_"
-            f"{target_month}"
+            f"generation_result_{target_month}"
         ] = result
 
     finally:
@@ -562,24 +449,16 @@ if generation_result is not None:
     st.subheader("生成結果")
 
     if generation_result.generated:
-        st.success(
-            "シフトを生成し、"
-            "データベースへ保存しました。"
-        )
+        st.success("シフトを生成し、データベースへ保存しました。")
     else:
-        st.error(
-            "シフトを生成できませんでした。"
-        )
+        st.error("シフトを生成できませんでした。")
 
     solver_result = (
         generation_result.solver_result
     )
 
     if solver_result is None:
-        st.info(
-            "入力エラーにより、"
-            "Solverは実行されませんでした。"
-        )
+        st.info("入力エラーにより、""Solverは実行されませんでした。")
     else:
         solver_status = (
             solver_result.status
@@ -629,24 +508,17 @@ if generation_result is not None:
 
         if solver_status == "FEASIBLE":
             st.info(
-                "制約を満たすシフトが"
-                "見つかりました。"
-                "ただし、探索時間内に"
-                "最適性の証明までは"
-                "完了していません。"
+                "制約を満たすシフトが見つかりました。"
+                "ただし、探索時間内に最適性の証明までは完了していません。"
             )
         elif solver_status == "INFEASIBLE":
             st.error(
-                "すべてのハード制約を"
-                "同時に満たすシフトが"
-                "存在しません。"
+                "すべてのハード制約を同時に満たすシフトが存在しません。"
             )
         elif solver_status == "UNKNOWN":
             st.warning(
-                "探索時間内に実行可能解を"
-                "確定できませんでした。"
-                "探索時間を延ばして"
-                "再実行してください。"
+                "探索時間内に実行可能解を確定できませんでした。"
+                "探索時間を延ばして再実行してください。"
             )
 
     show_validation_issues(
@@ -655,8 +527,7 @@ if generation_result is not None:
             .validation_issues
         ),
         empty_message=(
-            "生成結果に制約違反や"
-            "警告はありません。"
+            "生成結果に制約違反や警告はありません。"
         ),
     )
 
@@ -676,10 +547,7 @@ st.divider()
 st.subheader("月間シフト")
 
 if not assignments:
-    st.info(
-        "対象月のシフトは"
-        "まだ生成されていません。"
-    )
+    st.info("対象月のシフトはまだ生成されていません。")
 else:
     schedule_df = build_schedule_table(
         year=selected_year,
@@ -740,9 +608,7 @@ st.divider()
 st.subheader("保存済みシフトの検証")
 
 if not assignments:
-    st.info(
-        "検証対象のシフトがありません。"
-    )
+    st.info("検証対象のシフトがありません。")
 else:
     schedule_issues = (
         validate_month_schedule(
@@ -753,8 +619,7 @@ else:
     show_validation_issues(
         schedule_issues,
         empty_message=(
-            "保存済みシフトは"
-            "すべての検証を通過しています。"
+            "保存済みシフトはすべての検証を通過しています。"
         ),
     )
 
@@ -763,9 +628,7 @@ st.divider()
 st.subheader("従業員別勤務集計")
 
 if not assignments:
-    st.info(
-        "集計対象のシフトがありません。"
-    )
+    st.info("集計対象のシフトがありません。")
 else:
     summaries = (
         get_month_employee_summaries(
