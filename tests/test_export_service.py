@@ -6,6 +6,8 @@ import pandas as pd
 
 from src.export_service import (
     build_assignment_detail,
+    build_employee_calendar_export,
+    build_employee_schedule_export_table,
     build_employee_summary_table,
     build_export_filename,
     build_schedule_export_table,
@@ -199,4 +201,87 @@ def test_build_export_filename() -> None:
 
     assert filename == (
         "shift_monthly_202608.csv"
+    )
+
+
+def make_employee(
+    employee_id: str = "E001",
+    name: str = "山田太郎",
+) -> Employee:
+    """テスト用の従業員を作成する。"""
+
+    return Employee(
+        employee_id=employee_id,
+        name=name,
+        is_manager=True,
+        contract_days=20,
+        can_work_early=True,
+        can_work_late=True,
+        is_active=True,
+    )
+
+
+def test_build_employee_schedule_export_table() -> None:
+    employee = make_employee()
+
+    assignments = [
+        ScheduleAssignment(
+            target_date=date(2026, 8, 1),
+            shift_type="early",
+            employee_id="E001",
+        ),
+        ScheduleAssignment(
+            target_date=date(2026, 8, 2),
+            shift_type="late",
+            employee_id="E001",
+        ),
+    ]
+
+    dataframe = (
+        build_employee_schedule_export_table(
+            target_month="2026-08",
+            assignments=assignments,
+            employee_map={
+                "E001": employee,
+            },
+        )
+    )
+
+    assert dataframe.iloc[0]["従業員ID"] == "E001"
+    assert dataframe.iloc[0]["氏名"] == "山田太郎"
+    assert dataframe.iloc[0]["1(土)"] == "早"
+    assert dataframe.iloc[0]["2(日)"] == "遅"
+    assert dataframe.iloc[0]["3(月)"] == "休"
+
+
+def test_build_employee_calendar_export() -> None:
+    employee = make_employee()
+
+    assignments = [
+        ScheduleAssignment(
+            target_date=date(2026, 8, 1),
+            shift_type="early",
+            employee_id="E001",
+        ),
+        ScheduleAssignment(
+            target_date=date(2026, 8, 3),
+            shift_type="late",
+            employee_id="E001",
+        ),
+    ]
+
+    dataframe = build_employee_calendar_export(
+        target_month="2026-08",
+        employee=employee,
+        assignments=assignments,
+    )
+
+    assert dataframe.iloc[0]["土"] == (
+        "1日 早番"
+    )
+    assert dataframe.iloc[0]["日"] == (
+        "2日 休み"
+    )
+    assert dataframe.iloc[1]["月"] == (
+        "3日 遅番"
     )
