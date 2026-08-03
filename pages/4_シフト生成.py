@@ -22,6 +22,7 @@ from src.schedule_service import (
 )
 from src.schedule_view import (
     build_assignment_dataframe,
+    build_employee_schedule_table,
     build_month_schedule_table,
     build_summary_dataframe,
 )
@@ -309,42 +310,55 @@ st.subheader("月間シフト")
 if not assignments:
     st.info("対象月のシフトはまだ生成されていません。")
 else:
-    schedule_df = build_month_schedule_table(
-        year=selected_year,
-        month=selected_month,
-        assignments=assignments,
-        employee_map=employee_map,
+    date_tab, employee_tab = st.tabs(
+        ["日付別に見る", "従業員別に見る"]
     )
 
-    st.dataframe(
-        schedule_df,
-        width="stretch",
-        hide_index=True,
-        column_config={
-            "日付": (
-                st.column_config.DateColumn(
-                    "日付",
-                    format="MM/DD",
-                )
-            ),
-            "曜日": (
-                st.column_config.TextColumn(
-                    "曜日",
-                    width="small",
-                )
-            ),
-            "早番": (
-                st.column_config.TextColumn(
-                    "早番"
-                )
-            ),
-            "遅番": (
-                st.column_config.TextColumn(
-                    "遅番"
-                )
-            ),
-        },
-    )
+    with date_tab:
+        st.caption("日付ごとに、早番・遅番へ配置された従業員を確認できます。")
+
+        schedule_df = build_month_schedule_table(
+            year=selected_year,
+            month=selected_month,
+            assignments=assignments,
+            employee_map=employee_map,
+        )
+
+        st.dataframe(
+            schedule_df,
+            width="stretch",
+            hide_index=True,
+            column_config={
+                "日付": st.column_config.DateColumn("日付", format="MM/DD"),
+                "曜日": st.column_config.TextColumn("曜日", width="small"),
+                "早番": st.column_config.TextColumn("早番"),
+                "遅番": st.column_config.TextColumn("遅番"),
+            },
+        )
+
+    with employee_tab:
+        st.caption("従業員ごとに、月間の早番・遅番・休みを確認できます。")
+
+        employee_schedule_df = (
+            build_employee_schedule_table(
+                year=selected_year,
+                month=selected_month,
+                assignments=assignments,
+                employee_map=employee_map,
+            )
+        )
+
+        st.dataframe(
+            employee_schedule_df,
+            width="stretch",
+            hide_index=True,
+            height=min(35 * (len(employee_schedule_df) + 1), 700),
+            column_config={
+                "従業員": st.column_config.TextColumn("従業員", width="medium"),
+            },
+        )
+
+        st.caption("早：早番　遅：遅番　休：勤務なし")
 
 if assignments:
     with st.expander(
