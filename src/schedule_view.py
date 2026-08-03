@@ -240,6 +240,37 @@ def build_employee_schedule_table(
     )
 
 
+def style_employee_schedule_cell(value: object) -> str:
+    """従業員別シフト表のセル表示を装飾する。"""
+
+    text = str(value)
+
+    if text.startswith("早"):
+        return (
+            "background-color: #dbeafe;"
+            "color: #1e3a8a;"
+            "font-weight: 600;"
+            "text-align: center;"
+        )
+
+    if text.startswith("遅"):
+        return (
+            "background-color: #ffedd5;"
+            "color: #9a3412;"
+            "font-weight: 600;"
+            "text-align: center;"
+        )
+
+    if text == "休":
+        return (
+            "background-color: #f3f4f6;"
+            "color: #6b7280;"
+            "text-align: center;"
+        )
+
+    return ""
+
+
 def build_assignment_dataframe(
     *,
     assignments: list[ScheduleAssignment],
