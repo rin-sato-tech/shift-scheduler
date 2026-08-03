@@ -166,6 +166,107 @@ def show_day_off_calendar(
     return selected_dates
 
 
+def show_day_off_delete_calendar(
+    *,
+    selected_year: int,
+    selected_month: int,
+    employee_id: str,
+    registered_dates: set[date],
+) -> set[date]:
+    """削除する希望休をカレンダー形式で選択する。"""
+
+    state_key = (
+        f"selected_delete_day_off_dates_"
+        f"{selected_year}_{selected_month}_{employee_id}"
+    )
+
+    if state_key not in st.session_state:
+        st.session_state[state_key] = set()
+
+    selected_dates: set[date] = st.session_state[state_key]
+
+    # 登録状態が変化した場合に、存在しない日付を選択状態から除外する
+    selected_dates.intersection_update(registered_dates)
+    st.session_state[state_key] = selected_dates
+
+    st.caption("登録済みの日付をクリックすると、削除対象の選択と解除ができます。")
+
+    weekday_labels = ["月", "火", "水", "木", "金", "土", "日"]
+    weekday_columns = st.columns(7)
+
+    for column, weekday_label in zip(
+        weekday_columns,
+        weekday_labels,
+        strict=True,
+    ):
+        column.markdown(
+            (
+                "<div style='text-align:center; "
+                f"font-weight:bold'>{weekday_label}</div>"
+            ),
+            unsafe_allow_html=True,
+        )
+
+    month_calendar = calendar.Calendar(
+        firstweekday=calendar.MONDAY
+    )
+
+    for week in month_calendar.monthdayscalendar(
+        selected_year,
+        selected_month,
+    ):
+        day_columns = st.columns(7)
+
+        for weekday_index, day_number in enumerate(week):
+            column = day_columns[weekday_index]
+
+            if day_number == 0:
+                column.write("")
+                continue
+
+            target_date = date(
+                selected_year,
+                selected_month,
+                day_number,
+            )
+
+            if target_date not in registered_dates:
+                column.button(
+                    f"―\n{day_number}",
+                    key=(
+                        f"unregistered_delete_day_"
+                        f"{employee_id}_{target_date}"
+                    ),
+                    disabled=True,
+                    use_container_width=True,
+                )
+                continue
+
+            is_selected = target_date in selected_dates
+            label = "削除" if is_selected else "×"
+
+            clicked = column.button(
+                f"{label}\n{day_number}",
+                key=(
+                    f"day_off_delete_calendar_"
+                    f"{employee_id}_{target_date}"
+                ),
+                type="primary" if is_selected else "secondary",
+                use_container_width=True,
+            )
+
+            if clicked:
+                if is_selected:
+                    selected_dates.remove(target_date)
+                else:
+                    selected_dates.add(target_date)
+
+                st.session_state[state_key] = selected_dates
+                st.rerun()
+
+    return selected_dates
+
+
 init_db()
 
 st.set_page_config(
@@ -348,6 +449,8 @@ else:
         hide_index=True,
     )
 
+st.divider()
+
 st.markdown("#### 希望休を削除")
 
 requests = list_day_off_requests(target_month)
@@ -355,42 +458,100 @@ requests = list_day_off_requests(target_month)
 if not requests:
     st.caption("削除できる希望休はありません。")
 else:
-    request_options = {}
+    employee_ids_with_requests = {
+        request.employee_id
+        for request in requests
+    }
 
-    for request in requests:
-        employee = get_employee(request.employee_id)
+    delete_employee_options = {
+        f"{employee.employee_id}｜{employee.name}": employee.employee_id
+        for employee in employees
+        if employee.employee_id in employee_ids_with_requests
+    }
 
-        employee_name = employee.name if employee is not None else "不明"
-
-        label = (
-            f"{request.target_date:%Y/%m/%d}"
-            f"｜{request.employee_id}"
-            f"｜{employee_name}"
-        )
-
-        request_options[label] = request
-
-    selected_request_label = st.selectbox(
-        "削除対象",
-        options=list(request_options.keys()),
+    selected_delete_employee_label = st.selectbox(
+        "削除対象の従業員",
+        options=list(delete_employee_options.keys()),
+        key=f"delete_day_off_employee_{target_month}",
     )
 
-    selected_request = request_options[selected_request_label]
+    selected_delete_employee_id = delete_employee_options[
+        selected_delete_employee_label
+    ]
 
-    if st.button(
-        "選択した希望休を削除",
-        key=f"delete_day_off_{target_month}"
-    ):
-        result = remove_day_off_request(
-            employee_id=(selected_request.employee_id),
-            target_date=(selected_request.target_date),
+    delete_employee_requests = list_day_off_requests(
+        target_month,
+        employee_id=selected_delete_employee_id,
+    )
+
+    delete_registered_dates = {
+        request.target_date
+        for request in delete_employee_requests
+    }
+
+    selected_delete_dates = show_day_off_delete_calendar(
+        selected_year=selected_year,
+        selected_month=selected_month,
+        employee_id=selected_delete_employee_id,
+        registered_dates=delete_registered_dates,
+    )
+
+    if selected_delete_dates:
+        selected_delete_date_text = "、".join(
+            target_date.strftime("%m月%d日")
+            for target_date in sorted(selected_delete_dates)
         )
 
-        if result.succeeded:
+        st.warning(
+            "削除する希望休："
+            f"{selected_delete_date_text}"
+        )
+    else:
+        st.caption("削除する希望休は選択されていません。")
+
+    delete_submitted = st.button(
+        "選択した希望休を削除",
+        disabled=not selected_delete_dates,
+        key=(
+            f"delete_day_off_"
+            f"{target_month}_{selected_delete_employee_id}"
+        ),
+    )
+
+    if delete_submitted:
+        succeeded_dates: list[date] = []
+        error_messages: list[str] = []
+
+        for selected_delete_date in sorted(
+            selected_delete_dates
+        ):
+            result = remove_day_off_request(
+                employee_id=selected_delete_employee_id,
+                target_date=selected_delete_date,
+            )
+
+            if result.succeeded:
+                succeeded_dates.append(selected_delete_date)
+            else:
+                error_messages.append(result.message)
+
+        if error_messages:
+            for error_message in error_messages:
+                st.error(error_message)
+
+        if succeeded_dates:
+            state_key = (
+                f"selected_delete_day_off_dates_"
+                f"{selected_year}_{selected_month}_"
+                f"{selected_delete_employee_id}"
+            )
+            st.session_state[state_key] = set()
+
             set_flash_message(
                 key="day_off_flash",
-                message=result.message,
+                message=(
+                    f"{selected_delete_employee_label}の"
+                    f"希望休を{len(succeeded_dates)}件削除しました。"
+                ),
             )
             st.rerun()
-        else:
-            st.error(result.message)
