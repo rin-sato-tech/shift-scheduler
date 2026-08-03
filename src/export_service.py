@@ -23,6 +23,7 @@ from src.schedule_service import (
 class ScheduleExportData:
     target_month: str
     schedule_table: pd.DataFrame
+    employee_schedule_table: pd.DataFrame
     assignment_detail: pd.DataFrame
     employee_summary: pd.DataFrame
 
@@ -325,6 +326,13 @@ def get_schedule_export_data(
                 employee_map=employee_map,
             )
         ),
+        employee_schedule_table=(
+            build_employee_schedule_export_table(
+                target_month=target_month,
+                assignments=assignments,
+                employee_map=employee_map,
+            )
+        ),
         assignment_detail=(
             build_assignment_detail(
                 assignments=assignments,
@@ -365,4 +373,188 @@ def build_export_filename(
     return (
         f"shift_{data_type}_"
         f"{safe_month}.csv"
+    )
+
+
+def build_employee_schedule_export_table(
+    *,
+    target_month: str,
+    assignments: list[ScheduleAssignment],
+    employee_map: dict[str, Employee],
+) -> pd.DataFrame:
+    """全従業員の月間シフトを従業員×日付形式に変換する。"""
+
+    year, month = parse_target_month(
+        target_month
+    )
+
+    last_day = calendar.monthrange(
+        year,
+        month,
+    )[1]
+
+    assignment_map = {
+        (
+            assignment.employee_id,
+            assignment.target_date,
+        ): assignment
+        for assignment in assignments
+    }
+
+    assigned_employee_ids = {
+        assignment.employee_id
+        for assignment in assignments
+    }
+
+    employees = sorted(
+        (
+            employee
+            for employee in employee_map.values()
+            if employee.is_active
+        ),
+        key=lambda employee: employee.employee_id,
+    )
+
+    date_columns = []
+
+    for day in range(1, last_day + 1):
+        target_date = date(
+            year,
+            month,
+            day,
+        )
+
+        date_columns.append(
+            f"{day}"
+            f"({WEEKDAY_LABELS[target_date.weekday()]})"
+        )
+
+    rows = []
+
+    for employee in employees:
+        row = {
+            "従業員ID": employee.employee_id,
+            "氏名": employee.name,
+        }
+
+        for day, column_name in enumerate(
+            date_columns,
+            start=1,
+        ):
+            target_date = date(
+                year,
+                month,
+                day,
+            )
+
+            assignment = assignment_map.get(
+                (
+                    employee.employee_id,
+                    target_date,
+                )
+            )
+
+            if assignment is None:
+                row[column_name] = "休"
+                continue
+
+            shift_label = {
+                "early": "早",
+                "late": "遅",
+            }.get(
+                assignment.shift_type,
+                assignment.shift_type,
+            )
+
+            if assignment.is_manual:
+                shift_label = f"{shift_label}※"
+
+            row[column_name] = shift_label
+
+        rows.append(row)
+
+    return pd.DataFrame(
+        rows,
+        columns=[
+            "従業員ID",
+            "氏名",
+            *date_columns,
+        ],
+    )
+
+
+def build_employee_calendar_export(
+    *,
+    target_month: str,
+    employee: Employee,
+    assignments: list[ScheduleAssignment],
+) -> pd.DataFrame:
+    """従業員1名分の月間シフトをカレンダー形式に変換する。"""
+
+    year, month = parse_target_month(
+        target_month
+    )
+
+    employee_assignments = {
+        assignment.target_date: assignment
+        for assignment in assignments
+        if assignment.employee_id
+        == employee.employee_id
+    }
+
+    month_calendar = calendar.Calendar(
+        firstweekday=calendar.MONDAY
+    )
+
+    weeks = month_calendar.monthdayscalendar(
+        year,
+        month,
+    )
+
+    rows = []
+
+    for week in weeks:
+        row = {}
+
+        for weekday_index, day_number in enumerate(
+            week
+        ):
+            weekday_label = WEEKDAY_LABELS[
+                weekday_index
+            ]
+
+            if day_number == 0:
+                row[weekday_label] = ""
+                continue
+
+            target_date = date(
+                year,
+                month,
+                day_number,
+            )
+
+            assignment = employee_assignments.get(
+                target_date
+            )
+
+            if assignment is None:
+                shift_label = "休み"
+            else:
+                shift_label = SHIFT_LABELS.get(
+                    assignment.shift_type,
+                    assignment.shift_type,
+                )
+
+                if assignment.is_manual:
+                    shift_label = f"{shift_label}※"
+
+            row[weekday_label] = (
+                f"{day_number}日 {shift_label}"
+            )
+
+        rows.append(row)
+
+    return pd.DataFrame(
+        rows,
+        columns=list(WEEKDAY_LABELS),
     )
