@@ -796,7 +796,7 @@ CSV出力では次の方針を採用する。
 出力例：
 
 ```text
-shift_schedule_202608.csv
+shift_monthly_202608.csv
 shift_detail_202608.csv
 shift_summary_202608.csv
 ```

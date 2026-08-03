@@ -123,11 +123,11 @@ erDiagram
 
 ## 6. `employees`
 
-## 6.1 概要
+### 6.1 概要
 
 従業員の基本情報と、シフト生成に必要な勤務条件を管理する。
 
-## 6.2 カラム定義
+### 6.2 カラム定義
 
 | カラム名         | SQLite型 | NULL | デフォルト | 制約       | 内容             |
 | ---------------- | -------- | ---: | ---------: | ---------- | ---------------- |
@@ -141,7 +141,7 @@ erDiagram
 | `created_at`     | TEXT     | 不可 |       なし | なし       | 作成日時         |
 | `updated_at`     | TEXT     | 不可 |       なし | なし       | 更新日時         |
 
-## 6.3 主キー
+### 6.3 主キー
 
 ```text
 employee_id
@@ -149,9 +149,9 @@ employee_id
 
 従業員IDはシステム内で一意とする。
 
-## 6.4 CHECK制約
+### 6.4 CHECK制約
 
-### 氏名
+#### 氏名
 
 ```sql
 CHECK (length(trim(name)) > 0)
@@ -159,19 +159,19 @@ CHECK (length(trim(name)) > 0)
 
 空文字または空白のみの氏名を拒否する。
 
-### 責任者区分
+#### 責任者区分
 
 ```sql
 CHECK (is_manager IN (0, 1))
 ```
 
-### 契約勤務日数
+#### 契約勤務日数
 
 ```sql
 CHECK (contract_days BETWEEN 0 AND 31)
 ```
 
-### 勤務可能シフト
+#### 勤務可能シフト
 
 ```sql
 CHECK (can_work_early IN (0, 1))
@@ -181,13 +181,13 @@ CHECK (can_work_early = 1 OR can_work_late = 1)
 
 早番・遅番の両方を勤務不可にはできない。
 
-### 有効状態
+#### 有効状態
 
 ```sql
 CHECK (is_active IN (0, 1))
 ```
 
-## 6.5 業務ルール
+### 6.5 業務ルール
 
 - 従業員IDは登録後に原則変更しない
 - 従業員は通常操作では物理削除しない
@@ -195,7 +195,7 @@ CHECK (is_active IN (0, 1))
 - 無効な従業員は新しいシフト生成の対象外とする
 - 無効化前に登録された希望休やシフトは保持する
 
-## 6.6 Pythonモデル
+### 6.6 Pythonモデル
 
 対応するモデルは`Employee`である。
 
@@ -217,13 +217,13 @@ SQLiteの整数値は、Repository層で`bool`へ変換する。
 
 ## 7. `day_off_requests`
 
-## 7.1 概要
+### 7.1 概要
 
 従業員ごとの希望休日を管理する。
 
 1行は「1従業員・1日」の希望休を表す。
 
-## 7.2 カラム定義
+### 7.2 カラム定義
 
 | カラム名             | SQLite型 | NULL | デフォルト | 制約       | 内容     |
 | -------------------- | -------- | ---: | ---------: | ---------- | -------- |
@@ -232,7 +232,7 @@ SQLiteの整数値は、Repository層で`bool`へ変換する。
 | `target_date`        | TEXT     | 不可 |       なし | 日付文字列 | 希望日   |
 | `created_at`         | TEXT     | 不可 |       なし | なし       | 作成日時 |
 
-## 7.3 主キー
+### 7.3 主キー
 
 ```text
 day_off_request_id
@@ -240,7 +240,7 @@ day_off_request_id
 
 `INTEGER PRIMARY KEY AUTOINCREMENT`を使用する。
 
-## 7.4 一意制約
+### 7.4 一意制約
 
 ```sql
 UNIQUE (employee_id, target_date)
@@ -248,7 +248,7 @@ UNIQUE (employee_id, target_date)
 
 同一従業員・同一日付の希望休を重複登録できない。
 
-## 7.5 外部キー
+### 7.5 外部キー
 
 ```sql
 FOREIGN KEY (employee_id)
@@ -258,7 +258,7 @@ FOREIGN KEY (employee_id)
 
 希望休を持つ従業員は物理削除できない。
 
-## 7.6 業務ルール
+### 7.6 業務ルール
 
 - 希望休は日単位とする
 - シフト区分別の希望休は扱わない
@@ -266,7 +266,7 @@ FOREIGN KEY (employee_id)
 - 無効な従業員への新規登録はアプリケーション側で拒否する
 - 希望休は画面から物理削除できる
 
-## 7.7 Pythonモデル
+### 7.7 Pythonモデル
 
 対応するモデルは`DayOffRequest`である。
 
@@ -285,13 +285,13 @@ DB取得時に`target_date`を`datetime.date`へ変換する。
 
 ## 8. `staffing_requirements`
 
-## 8.1 概要
+### 8.1 概要
 
 日付・シフトごとの必要人数と必要責任者数を管理する。
 
 1行は「1日・1シフト」の必要人数設定を表す。
 
-## 8.2 カラム定義
+### 8.2 カラム定義
 
 | カラム名                  | SQLite型 | NULL | デフォルト | 制約           | 内容           |
 | ------------------------- | -------- | ---: | ---------: | -------------- | -------------- |
@@ -303,13 +303,13 @@ DB取得時に`target_date`を`datetime.date`へ変換する。
 | `created_at`              | TEXT     | 不可 |       なし | なし           | 作成日時       |
 | `updated_at`              | TEXT     | 不可 |       なし | なし           | 更新日時       |
 
-## 8.3 主キー
+### 8.3 主キー
 
 ```text
 staffing_requirement_id
 ```
 
-## 8.4 シフト区分
+### 8.4 シフト区分
 
 ```sql
 CHECK (shift_type IN ('early', 'late'))
@@ -320,7 +320,7 @@ CHECK (shift_type IN ('early', 'late'))
 | `early` | 早番   |
 | `late`  | 遅番   |
 
-## 8.5 人数制約
+### 8.5 人数制約
 
 ```sql
 CHECK (required_count >= 0)
@@ -330,7 +330,7 @@ CHECK (required_manager_count <= required_count)
 
 必要責任者数は必要人数を超えられない。
 
-## 8.6 一意制約
+### 8.6 一意制約
 
 ```sql
 UNIQUE (target_date, shift_type)
@@ -338,7 +338,7 @@ UNIQUE (target_date, shift_type)
 
 同一日付・同一シフトの設定は1件とする。
 
-## 8.7 登録・更新方式
+### 8.7 登録・更新方式
 
 登録にはUPSERTを使用する。
 
@@ -350,7 +350,7 @@ UNIQUE (target_date, shift_type)
 
 `created_at`は初回登録時の値を保持する。
 
-## 8.8 Pythonモデル
+### 8.8 Pythonモデル
 
 対応するモデルは`StaffingRequirement`である。
 
@@ -367,13 +367,13 @@ class StaffingRequirement:
 
 ## 9. `schedule_generations`
 
-## 9.1 概要
+### 9.1 概要
 
 シフト自動生成処理の実行結果を管理する。
 
 現在の画面では履歴一覧を表示しないが、生成されたシフトと生成条件の結果を関連付けるために保持する。
 
-## 9.2 カラム定義
+### 9.2 カラム定義
 
 | カラム名          | SQLite型 | NULL | デフォルト | 制約        | 内容             |
 | ----------------- | -------- | ---: | ---------: | ----------- | ---------------- |
@@ -385,13 +385,13 @@ class StaffingRequirement:
 | `total_deviation` | INTEGER  |   可 |       NULL | 0以上を想定 | 契約日数乖離合計 |
 | `generated_at`    | TEXT     | 不可 |       なし | ISO 8601    | 生成日時         |
 
-## 9.3 主キー
+### 9.3 主キー
 
 ```text
 generation_id
 ```
 
-## 9.4 Solver状態
+### 9.4 Solver状態
 
 ```sql
 CHECK (
@@ -417,7 +417,7 @@ CHECK (
 
 現在の業務処理では、`OPTIMAL`または`FEASIBLE`となった生成結果をシフトとともに保存する。
 
-## 9.5 NULLの扱い
+### 9.5 NULLの扱い
 
 解が得られない場合を考慮し、次の列はNULLを許容する。
 
@@ -425,7 +425,7 @@ CHECK (
 - `max_deviation`
 - `total_deviation`
 
-## 9.6 Pythonモデル
+### 9.6 Pythonモデル
 
 生成履歴テーブル専用のdataclassは設けていない。
 
@@ -454,13 +454,13 @@ class ScheduleGenerationServiceResult:
 
 ## 10. `schedules`
 
-## 10.1 概要
+### 10.1 概要
 
 自動生成または手動変更後のシフト配置を管理する。
 
 1行は「1従業員・1日・1シフト」の配置を表す。
 
-## 10.2 カラム定義
+### 10.2 カラム定義
 
 | カラム名        | SQLite型 | NULL | デフォルト | 制約           | 内容           |
 | --------------- | -------- | ---: | ---------: | -------------- | -------------- |
@@ -473,19 +473,19 @@ class ScheduleGenerationServiceResult:
 | `created_at`    | TEXT     | 不可 |       なし | なし           | 作成日時       |
 | `updated_at`    | TEXT     | 不可 |       なし | なし           | 更新日時       |
 
-## 10.3 主キー
+### 10.3 主キー
 
 ```text
 schedule_id
 ```
 
-## 10.4 シフト区分
+### 10.4 シフト区分
 
 ```sql
 CHECK (shift_type IN ('early', 'late'))
 ```
 
-## 10.5 手動変更フラグ
+### 10.5 手動変更フラグ
 
 ```sql
 CHECK (is_manual IN (0, 1))
@@ -496,7 +496,7 @@ CHECK (is_manual IN (0, 1))
 |   0 | 自動生成された配置                   |
 |   1 | 手動変更によって作成・変更された配置 |
 
-## 10.6 一意制約
+### 10.6 一意制約
 
 ```sql
 UNIQUE (target_date, employee_id)
@@ -506,9 +506,9 @@ UNIQUE (target_date, employee_id)
 
 この制約により、DB上でも1人1日1シフトを保証する。
 
-## 10.7 外部キー
+### 10.7 外部キー
 
-### 生成履歴
+#### 生成履歴
 
 ```sql
 FOREIGN KEY (generation_id)
@@ -518,7 +518,7 @@ FOREIGN KEY (generation_id)
 
 生成履歴を削除してもシフト配置は残し、`generation_id`をNULLとする。
 
-### 従業員
+#### 従業員
 
 ```sql
 FOREIGN KEY (employee_id)
@@ -528,7 +528,7 @@ FOREIGN KEY (employee_id)
 
 シフト配置を持つ従業員は物理削除できない。
 
-## 10.8 Pythonモデル
+### 10.8 Pythonモデル
 
 対応するモデルは`ScheduleAssignment`である。
 
@@ -543,21 +543,21 @@ class ScheduleAssignment:
 
 `generation_id`、`schedule_id`、作成日時、更新日時は、通常の検証・表示処理では使用しないためモデルに含めない。
 
-## 10.9 保存方式
+### 10.9 保存方式
 
-### 自動生成
+#### 自動生成
 
 自動生成に成功した場合は、対象月の既存シフトを削除し、新しい配置を一括登録する。
 
 登録する配置には同じ`generation_id`を設定する。
 
-### 手動変更
+#### 手動変更
 
 手動変更を保存する場合も、対象月のシフト全体を一括置換する。
 
 既存配置の個別UPDATEではなく、検証済み編集案を月単位で保存する。
 
-### トランザクション
+#### トランザクション
 
 次の処理を同一トランザクション内で実行する。
 
@@ -575,7 +575,7 @@ class ScheduleAssignment:
 
 ## 11. テーブル間の関係
 
-## 11.1 従業員と希望休
+### 11.1 従業員と希望休
 
 ```text
 employees 1 ── N day_off_requests
@@ -583,7 +583,7 @@ employees 1 ── N day_off_requests
 
 1人の従業員は複数の希望休を持つ。
 
-## 11.2 従業員とシフト配置
+### 11.2 従業員とシフト配置
 
 ```text
 employees 1 ── N schedules
@@ -591,7 +591,7 @@ employees 1 ── N schedules
 
 1人の従業員は複数日のシフト配置を持つ。
 
-## 11.3 生成履歴とシフト配置
+### 11.3 生成履歴とシフト配置
 
 ```text
 schedule_generations 1 ── N schedules
@@ -601,7 +601,7 @@ schedule_generations 1 ── N schedules
 
 `schedules.generation_id`はNULLを許容するため、生成履歴と関連しない配置も保持できる。
 
-## 11.4 必要人数とシフト配置
+### 11.4 必要人数とシフト配置
 
 外部キーは設定しないが、次の組み合わせで論理的に対応する。
 
@@ -615,7 +615,7 @@ target_date + shift_type
 
 ## 12. Python型定義
 
-## 12.1 `ShiftType`
+### 12.1 `ShiftType`
 
 ```python
 ShiftType = Literal["early", "late"]
@@ -623,7 +623,7 @@ ShiftType = Literal["early", "late"]
 
 シフト種別を早番または遅番に制限する。
 
-## 12.2 `ValidationSeverity`
+### 12.2 `ValidationSeverity`
 
 ```python
 ValidationSeverity = Literal[
@@ -632,7 +632,7 @@ ValidationSeverity = Literal[
 ]
 ```
 
-## 12.3 `SolverStatus`
+### 12.3 `SolverStatus`
 
 ```python
 SolverStatus = Literal[
@@ -648,7 +648,7 @@ SolverStatus = Literal[
 
 ## 13. 検証結果モデル
 
-## 13.1 `ValidationIssue`
+### 13.1 `ValidationIssue`
 
 ```python
 @dataclass(frozen=True)
@@ -678,7 +678,7 @@ class ValidationIssue:
 
 ## 14. 勤務集計モデル
 
-## 14.1 `EmployeeScheduleSummary`
+### 14.1 `EmployeeScheduleSummary`
 
 ```python
 @dataclass(frozen=True)
@@ -758,7 +758,7 @@ Python:
 
 ## 17. 日付・日時の扱い
 
-## 17.1 DB保存形式
+### 17.1 DB保存形式
 
 | 種類   | 保存形式     | 例                          |
 | ------ | ------------ | --------------------------- |
@@ -766,14 +766,14 @@ Python:
 | 対象月 | `YYYY-MM`    | `2026-08`                   |
 | 日時   | ISO 8601     | `2026-08-01T14:30:00+09:00` |
 
-## 17.2 アプリケーション内
+### 17.2 アプリケーション内
 
 - 日付は`datetime.date`で扱う
 - 日時は`datetime.datetime`で生成する
 - DB登録時に`isoformat()`で文字列へ変換する
 - DB取得時に`date.fromisoformat()`で日付へ変換する
 
-## 17.3 対象月
+### 17.3 対象月
 
 対象月は`YYYY-MM`形式の文字列として扱う。
 
@@ -849,7 +849,7 @@ datetime.now().astimezone().isoformat(
 
 ## 20. 更新・削除方針
 
-## 20.1 `employees`
+### 20.1 `employees`
 
 - 新規登録はINSERT
 - 属性変更はUPDATE
@@ -857,27 +857,27 @@ datetime.now().astimezone().isoformat(
 - 原則として物理削除しない
 - 従業員IDは変更しない
 
-## 20.2 `day_off_requests`
+### 20.2 `day_off_requests`
 
 - 新規登録はINSERT
 - 内容変更は削除後に再登録
 - 削除はDELETE
 - 従業員削除時は`ON DELETE RESTRICT`
 
-## 20.3 `staffing_requirements`
+### 20.3 `staffing_requirements`
 
 - 登録・更新はUPSERT
 - 同一日付・同一シフトを更新対象とする
 - 月全体を一括保存できる
 - 削除が必要な場合は対象月を条件として実行する
 
-## 20.4 `schedule_generations`
+### 20.4 `schedule_generations`
 
 - 生成成功時にINSERT
 - 原則として更新しない
 - 生成履歴削除時は関連シフトの`generation_id`をNULLとする
 
-## 20.5 `schedules`
+### 20.5 `schedules`
 
 - 単体登録・削除用Repository関数を持つ
 - 自動生成結果は月単位で一括置換する
@@ -888,7 +888,7 @@ datetime.now().astimezone().isoformat(
 
 ## 21. 整合性制約
 
-## 21.1 DBで保証する制約
+### 21.1 DBで保証する制約
 
 | 制約                       | 実現方法 |
 | -------------------------- | -------- |
@@ -904,7 +904,7 @@ datetime.now().astimezone().isoformat(
 | 同一従業員の同日重複配置   | UNIQUE   |
 | 存在しない従業員の参照防止 | 外部キー |
 
-## 21.2 アプリケーションで保証する制約
+### 21.2 アプリケーションで保証する制約
 
 | 制約                       | 理由                               |
 | -------------------------- | ---------------------------------- |
