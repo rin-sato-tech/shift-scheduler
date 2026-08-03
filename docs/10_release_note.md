@@ -7,7 +7,7 @@
 | バージョン   | v1.0.0                     |
 | リリース種別 | 初回公開版                 |
 | 対象システム | `shift-scheduler`          |
-| リリース日   | 2026-08-02                 |
+| リリース日   | 2026-08-03                 |
 | 用途         | 学習・ポートフォリオ用デモ |
 
 ---
@@ -356,7 +356,7 @@ DBへ保存する前に、複数変更と差分を確認できる。
 
 実行コマンド：
 
-```bash id="s4zd17"
+```bash
 python -m pytest -v --durations=20
 ```
 
@@ -368,7 +368,7 @@ python -m pytest -v --durations=20
 | 成功       |      90 |
 | 失敗       |       0 |
 | 成功率     |    100% |
-| 所要時間   | 24.96秒 |
+| 所要時間   | 25.00秒 |
 
 ---
 
@@ -392,7 +392,7 @@ python -m pytest -v --durations=20
 
 実行コマンド：
 
-```bash id="2fjsd2"
+```bash
 python scripts/check_db.py
 ```
 
