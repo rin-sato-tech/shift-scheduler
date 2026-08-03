@@ -25,6 +25,7 @@ from src.schedule_view import (
     build_employee_schedule_table,
     build_month_schedule_table,
     build_summary_dataframe,
+    style_employee_schedule_cell,
 )
 from src.ui_helpers import (
     select_target_month,
@@ -339,26 +340,38 @@ else:
     with employee_tab:
         st.caption("従業員ごとに、月間の早番・遅番・休みを確認できます。")
 
-        employee_schedule_df = (
-            build_employee_schedule_table(
-                year=selected_year,
-                month=selected_month,
-                assignments=assignments,
-                employee_map=employee_map,
-            )
+        employee_schedule_df = build_employee_schedule_table(
+            year=selected_year,
+            month=selected_month,
+            assignments=assignments,
+            employee_map=employee_map,
+        )
+
+        date_columns = [
+            column
+            for column in employee_schedule_df.columns
+            if column != "従業員"
+        ]
+
+        styled_employee_schedule = employee_schedule_df.style.map(
+            style_employee_schedule_cell,
+            subset=date_columns,
         )
 
         st.dataframe(
-            employee_schedule_df,
+            styled_employee_schedule,
             width="stretch",
             hide_index=True,
             height=min(35 * (len(employee_schedule_df) + 1), 700),
             column_config={
-                "従業員": st.column_config.TextColumn("従業員", width="medium"),
+                "従業員": st.column_config.TextColumn(
+                    "従業員",
+                    width="medium",
+                ),
             },
         )
 
-        st.caption("早：早番　遅：遅番　休：勤務なし")
+        st.caption("早：早番　遅：遅番　休：勤務なし　※：手動変更")
 
 if assignments:
     with st.expander(
