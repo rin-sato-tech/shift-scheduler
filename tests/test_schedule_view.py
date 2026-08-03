@@ -8,6 +8,7 @@ from src.models import (
 from src.schedule_view import (
     build_assignment_dataframe,
     build_change_dataframe,
+    build_employee_schedule_table,
     build_month_schedule_table,
     build_summary_dataframe,
 )
@@ -177,3 +178,82 @@ def test_build_summary_dataframe() -> None:
         "割当勤務日数"
     ] == 19
     assert dataframe.iloc[0]["差"] == -1
+
+
+def test_build_employee_schedule_table() -> None:
+    employee1 = make_employee(
+        employee_id="E001",
+        name="山田太郎",
+    )
+    employee2 = make_employee(
+        employee_id="E002",
+        name="佐藤花子",
+    )
+
+    assignments = [
+        ScheduleAssignment(
+            target_date=date(2026, 8, 1),
+            shift_type="early",
+            employee_id="E001",
+        ),
+        ScheduleAssignment(
+            target_date=date(2026, 8, 2),
+            shift_type="late",
+            employee_id="E001",
+        ),
+        ScheduleAssignment(
+            target_date=date(2026, 8, 1),
+            shift_type="late",
+            employee_id="E002",
+        ),
+    ]
+
+    dataframe = build_employee_schedule_table(
+        year=2026,
+        month=8,
+        assignments=assignments,
+        employee_map={
+            "E001": employee1,
+            "E002": employee2,
+        },
+    )
+
+    assert len(dataframe) == 2
+
+    assert dataframe.iloc[0]["従業員"] == (
+        "E001｜山田太郎"
+    )
+    assert dataframe.iloc[0]["1(土)"] == "早"
+    assert dataframe.iloc[0]["2(日)"] == "遅"
+    assert dataframe.iloc[0]["3(月)"] == "休"
+
+    assert dataframe.iloc[1]["従業員"] == (
+        "E002｜佐藤花子"
+    )
+    assert dataframe.iloc[1]["1(土)"] == "遅"
+    assert dataframe.iloc[1]["2(日)"] == "休"
+
+
+def test_build_employee_schedule_table_shows_manual_mark() -> None:
+    employee = make_employee()
+
+    assignments = [
+        ScheduleAssignment(
+            target_date=date(2026, 8, 1),
+            shift_type="early",
+            employee_id="E001",
+            is_manual=True,
+        )
+    ]
+
+    dataframe = build_employee_schedule_table(
+        year=2026,
+        month=8,
+        assignments=assignments,
+        employee_map={
+            "E001": employee,
+        },
+        show_manual_mark=True,
+    )
+
+    assert dataframe.iloc[0]["1(土)"] == "早※"
