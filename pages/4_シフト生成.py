@@ -323,6 +323,7 @@ else:
             month=selected_month,
             assignments=assignments,
             employee_map=employee_map,
+            show_manual_mark=True,
         )
 
         st.dataframe(
@@ -345,6 +346,7 @@ else:
             month=selected_month,
             assignments=assignments,
             employee_map=employee_map,
+            show_manual_mark=True,
         )
 
         date_columns = [
